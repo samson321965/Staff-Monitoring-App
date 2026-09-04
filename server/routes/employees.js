@@ -14,7 +14,19 @@ const {
 router.get(
     "/",
     authenticateToken,
-    authorizeRoles("admin", "hr", "manager"),
+    authorizeRoles(
+    "system_admin",
+    "commission",
+    "director",
+    "deputy_director",
+    "manager",
+    "ict_officer",
+    "hr",
+    "finance",
+    "compliance",
+    "officer",
+    "employee"
+),
     async (req, res) => {
     try {
         const result = await pool.query(`
@@ -56,7 +68,19 @@ router.get(
 router.get(
     "/:id",
     authenticateToken,
-    authorizeRoles("admin", "hr", "manager"),
+    authorizeRoles(
+    "system_admin",
+    "commission",
+    "director",
+    "deputy_director",
+    "manager",
+    "ict_officer",
+    "hr",
+    "finance",
+    "compliance",
+    "officer",
+    "employee"
+),
     async (req, res) => {
     try {
         const { id } = req.params;
@@ -102,7 +126,10 @@ router.get(
 router.post(
     "/",
     authenticateToken,
-    authorizeRoles("admin", "hr"),
+    authorizeRoles(
+            "system_admin",
+            "hr"
+            ),
     async (req, res) => {
     try {
         const {
@@ -170,7 +197,10 @@ router.post(
 router.put(
     "/:id",
     authenticateToken,
-    authorizeRoles("admin", "hr"),
+    authorizeRoles(
+    "system_admin",
+    "hr"
+),
     async (req, res) => {
     try {
         const { id } = req.params;
@@ -245,7 +275,7 @@ router.put(
 router.delete(
     "/:id",
     authenticateToken,
-    authorizeRoles("admin"),
+    authorizeRoles("system_admin"),
     async (req, res) => {
     try {
         const { id } = req.params;

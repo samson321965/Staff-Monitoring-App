@@ -5,59 +5,49 @@ const jwt = require("jsonwebtoken");
 // ==========================================
 const authenticateToken = (req, res, next) => {
     try {
-        // Get Authorization header
         const authHeader = req.headers.authorization;
 
-        // Check if token exists
         if (!authHeader || !authHeader.startsWith("Bearer ")) {
             return res.status(401).json({
-                message: "Access denied. No token provided."
+                message: "Access denied. No token provided.",
             });
         }
 
-        // Extract token
         const token = authHeader.split(" ")[1];
 
-        // Verify token
         const decoded = jwt.verify(
             token,
             process.env.JWT_SECRET || "staff_monitor_secret"
         );
 
-        // Store user information in request
         req.user = decoded;
 
         next();
-
     } catch (error) {
-
         console.error("Authentication error:", error.message);
 
         return res.status(401).json({
-            message: "Invalid or expired token."
+            message: "Invalid or expired token.",
         });
     }
 };
-
 
 // ==========================================
 // CHECK USER ROLE
 // ==========================================
 const authorizeRoles = (...allowedRoles) => {
-
     return (req, res, next) => {
-
-        // Make sure user is authenticated
         if (!req.user) {
             return res.status(401).json({
-                message: "Authentication required."
+                message: "Authentication required.",
             });
         }
 
-        // Check role
         if (!allowedRoles.includes(req.user.role)) {
             return res.status(403).json({
-                message: "Access denied. You do not have permission."
+                message: "Access denied. You do not have permission.",
+                requiredRoles: allowedRoles,
+                currentRole: req.user.role,
             });
         }
 
@@ -65,8 +55,15 @@ const authorizeRoles = (...allowedRoles) => {
     };
 };
 
+// ==========================================
+// CHECK USER HAS ONE OF SEVERAL PERMISSIONS
+// ==========================================
+const authorizeAnyRole = (...allowedRoles) => {
+    return authorizeRoles(...allowedRoles);
+};
 
 module.exports = {
     authenticateToken,
-    authorizeRoles
+    authorizeRoles,
+    authorizeAnyRole,
 };

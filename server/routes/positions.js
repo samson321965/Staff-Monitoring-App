@@ -12,12 +12,25 @@ const {
 
 // ============================================================
 // GET ALL POSITIONS
+// GET /api/positions
 // ============================================================
 
 router.get(
   "/",
   authenticateToken,
-  authorizeRoles("admin", "hr", "manager"),
+  authorizeRoles(
+    "system_admin",
+    "commission",
+    "director",
+    "deputy_director",
+    "manager",
+    "ict_officer",
+    "hr",
+    "finance",
+    "compliance",
+    "officer",
+    "employee"
+  ),
   async (req, res) => {
     try {
 
@@ -29,7 +42,7 @@ router.get(
         ORDER BY position_name ASC
       `);
 
-      res.json(result.rows);
+      res.status(200).json(result.rows);
 
     } catch (error) {
 

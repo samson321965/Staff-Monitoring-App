@@ -3,12 +3,33 @@ const router = express.Router();
 
 const pool = require("../config/database");
 
+const {
+  authenticateToken,
+  authorizeRoles
+} = require("../middleware/authMiddleware");
+
 
 // ======================================================
 // GET ALL ATTENDANCE RECORDS
 // ======================================================
 
-router.get("/", async (req, res) => {
+router.get(
+  "/",
+  authenticateToken,
+  authorizeRoles(
+    "system_admin",
+    "commission",
+    "director",
+    "deputy_director",
+    "manager",
+    "ict_officer",
+    "hr",
+    "finance",
+    "compliance",
+    "officer",
+    "employee"
+  ),
+  async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
@@ -70,7 +91,18 @@ router.get("/", async (req, res) => {
 // GET ATTENDANCE STATISTICS FOR TODAY
 // ======================================================
 
-router.get("/stats", async (req, res) => {
+router.get(
+  "/stats",
+  authenticateToken,
+  authorizeRoles(
+    "system_admin",
+    "director",
+    "deputy_director",
+    "manager",
+    "hr",
+    "ict_officer"
+  ),
+  async (req, res) => {
 
   try {
 
@@ -169,7 +201,23 @@ router.get("/stats", async (req, res) => {
 // GET ONE ATTENDANCE RECORD BY ID
 // ======================================================
 
-router.get("/:id", async (req, res) => {
+router.get(
+  "/:id",
+  authenticateToken,
+  authorizeRoles(
+    "system_admin",
+    "commission",
+    "director",
+    "deputy_director",
+    "manager",
+    "ict_officer",
+    "hr",
+    "finance",
+    "compliance",
+    "officer",
+    "employee"
+  ),
+  async (req, res) => {
 
   try {
 
@@ -249,7 +297,18 @@ router.get("/:id", async (req, res) => {
 // CREATE ATTENDANCE RECORD
 // ======================================================
 
-router.post("/", async (req, res) => {
+router.post(
+  "/",
+  authenticateToken,
+  authorizeRoles(
+    "system_admin",
+    "director",
+    "deputy_director",
+    "manager",
+    "hr",
+    "ict_officer"
+  ),
+  async (req, res) => {
 
   try {
 
@@ -341,7 +400,18 @@ router.post("/", async (req, res) => {
 // UPDATE ATTENDANCE RECORD
 // ======================================================
 
-router.put("/:id", async (req, res) => {
+router.put(
+  "/:id",
+  authenticateToken,
+  authorizeRoles(
+    "system_admin",
+    "director",
+    "deputy_director",
+    "manager",
+    "hr",
+    "ict_officer"
+  ),
+  async (req, res) => {
 
   try {
 
@@ -419,7 +489,11 @@ router.put("/:id", async (req, res) => {
 // DELETE ATTENDANCE RECORD
 // ======================================================
 
-router.delete("/:id", async (req, res) => {
+router.delete(
+  "/:id",
+  authenticateToken,
+  authorizeRoles("system_admin"),
+  async (req, res) => {
 
   try {
 
