@@ -2,21 +2,18 @@ import React, { useEffect, useState } from "react";
 import {
   FiSettings,
   FiUser,
-  FiBell,
-  FiShield,
-  FiDatabase,
-  FiGlobe,
-  FiSave,
-  FiRefreshCw,
   FiLock,
-  FiMail,
-  FiClock,
-  FiCalendar,
+  FiEye,
+  FiEyeOff,
+  FiSave,
   FiCheckCircle,
   FiAlertCircle,
+  FiShield,
 } from "react-icons/fi";
 
 import Sidebar from "../components/Sidebar";
+import logo from "../assets/images/logo.png";
+
 import "../styles/Settings.css";
 
 const API_URL =
@@ -24,290 +21,307 @@ const API_URL =
 
 const Settings = () => {
   /* =====================================================
-     SETTINGS STATE
+     USER INFORMATION
      ===================================================== */
 
-  const [activeSection, setActiveSection] = useState("general");
+  const [user, setUser] = useState({
+    id: "",
+    username: "",
+    email: "",
+    role: "",
+    employee_id: "",
+  });
+
+  /* =====================================================
+     PASSWORD
+     ===================================================== */
+
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+
+  /* =====================================================
+     SHOW / HIDE PASSWORD
+     ===================================================== */
+
+  const [showCurrentPassword, setShowCurrentPassword] =
+    useState(false);
+
+  const [showNewPassword, setShowNewPassword] =
+    useState(false);
+
+  const [showConfirmPassword, setShowConfirmPassword] =
+    useState(false);
+
+  /* =====================================================
+     STATUS
+     ===================================================== */
 
   const [loading, setLoading] = useState(false);
 
-  const [message, setMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
-  const [error, setError] = useState("");
-
-
-  /* =====================================================
-     GENERAL SETTINGS
-     ===================================================== */
-
-  const [generalSettings, setGeneralSettings] = useState({
-    systemName: "Staff Monitor",
-    organization: "Vanuatu Electoral Office",
-    language: "English",
-    timezone: "Pacific/Efate",
-    dateFormat: "DD MMM YYYY",
-    timeFormat: "12-hour",
-  });
-
+  const [errorMessage, setErrorMessage] = useState("");
 
   /* =====================================================
-     NOTIFICATION SETTINGS
-     ===================================================== */
-
-  const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    attendanceAlerts: true,
-    leaveAlerts: true,
-    lateAlerts: true,
-    systemNotifications: true,
-  });
-
-
-  /* =====================================================
-     SECURITY SETTINGS
-     ===================================================== */
-
-  const [securitySettings, setSecuritySettings] = useState({
-    sessionTimeout: "30",
-    passwordExpiry: "90",
-    requireStrongPassword: true,
-    loginNotifications: true,
-    twoFactorAuthentication: false,
-  });
-
-
-  /* =====================================================
-     ATTENDANCE SETTINGS
-     ===================================================== */
-
-  const [attendanceSettings, setAttendanceSettings] = useState({
-    workStartTime: "08:00",
-    workEndTime: "16:30",
-    lateAfter: "08:15",
-    minimumWorkingHours: "8",
-    allowManualAttendance: true,
-    requireCheckOut: true,
-  });
-
-
-  /* =====================================================
-     LOAD SETTINGS FROM BACKEND
-     ===================================================== */
-
-  const loadSettings = async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const response = await fetch(
-        `${API_URL}/settings`
-      );
-
-      if (!response.ok) {
-        throw new Error("Unable to load settings.");
-      }
-
-      const data = await response.json();
-
-      if (data.general) {
-        setGeneralSettings((previous) => ({
-          ...previous,
-          ...data.general,
-        }));
-      }
-
-      if (data.notifications) {
-        setNotificationSettings((previous) => ({
-          ...previous,
-          ...data.notifications,
-        }));
-      }
-
-      if (data.security) {
-        setSecuritySettings((previous) => ({
-          ...previous,
-          ...data.security,
-        }));
-      }
-
-      if (data.attendance) {
-        setAttendanceSettings((previous) => ({
-          ...previous,
-          ...data.attendance,
-        }));
-      }
-    } catch (err) {
-      console.error("Settings loading error:", err);
-
-      /*
-       * The page can still work without the backend.
-       * Once PostgreSQL/API is connected, this will
-       * automatically load the saved settings.
-       */
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-  /* =====================================================
-     LOAD SETTINGS WHEN PAGE OPENS
+     LOAD USER FROM LOCAL STORAGE
      ===================================================== */
 
   useEffect(() => {
-    loadSettings();
+    try {
+      const storedUser = localStorage.getItem("user");
+
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+
+        setUser({
+          id: parsedUser.id || "",
+          username: parsedUser.username || "",
+          email: parsedUser.email || "",
+          role: parsedUser.role || "",
+          employee_id: parsedUser.employee_id || "",
+        });
+      }
+    } catch (error) {
+      console.error(
+        "Unable to load user information:",
+        error
+      );
+    }
   }, []);
 
-
   /* =====================================================
-     UPDATE FUNCTIONS
+     HANDLE PASSWORD INPUT
      ===================================================== */
 
-  const updateGeneral = (field, value) => {
-    setGeneralSettings((previous) => ({
+  const handlePasswordChange = (e) => {
+    const { name, value } = e.target;
+
+    setPasswordData((previous) => ({
       ...previous,
-      [field]: value,
+      [name]: value,
     }));
+
+    setSuccessMessage("");
+    setErrorMessage("");
   };
-
-
-  const updateNotifications = (field, value) => {
-    setNotificationSettings((previous) => ({
-      ...previous,
-      [field]: value,
-    }));
-  };
-
-
-  const updateSecurity = (field, value) => {
-    setSecuritySettings((previous) => ({
-      ...previous,
-      [field]: value,
-    }));
-  };
-
-
-  const updateAttendance = (field, value) => {
-    setAttendanceSettings((previous) => ({
-      ...previous,
-      [field]: value,
-    }));
-  };
-
 
   /* =====================================================
-     SAVE SETTINGS
+     PASSWORD VALIDATION
      ===================================================== */
 
-  const saveSettings = async () => {
+  const validatePassword = () => {
+    const {
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    } = passwordData;
+
+    if (!currentPassword) {
+      return "Please enter your current password.";
+    }
+
+    if (!newPassword) {
+      return "Please enter your new password.";
+    }
+
+    if (!confirmPassword) {
+      return "Please confirm your new password.";
+    }
+
+    if (newPassword.length < 8) {
+      return "New password must be at least 8 characters long.";
+    }
+
+    if (newPassword !== confirmPassword) {
+      return "New password and confirm password do not match.";
+    }
+
+    if (currentPassword === newPassword) {
+      return "Your new password must be different from your current password.";
+    }
+
+    return "";
+  };
+
+  /* =====================================================
+     CHANGE PASSWORD
+     ===================================================== */
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+
+    setSuccessMessage("");
+    setErrorMessage("");
+
+    /* Validate fields */
+
+    const validationError = validatePassword();
+
+    if (validationError) {
+      setErrorMessage(validationError);
+      return;
+    }
+
+    /* Get JWT token */
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      setErrorMessage(
+        "Your login session has expired. Please log in again."
+      );
+
+      return;
+    }
+
     try {
       setLoading(true);
 
-      setMessage("");
+      /* ================================================
+         SEND REQUEST TO BACKEND
 
-      setError("");
-
-      const settings = {
-        general: generalSettings,
-        notifications: notificationSettings,
-        security: securitySettings,
-        attendance: attendanceSettings,
-      };
+         PUT /api/auth/change-password
+         ================================================ */
 
       const response = await fetch(
-        `${API_URL}/settings`,
+        `${API_URL}/auth/change-password`,
         {
           method: "PUT",
 
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
 
-          body: JSON.stringify(settings),
+          body: JSON.stringify({
+            currentPassword:
+              passwordData.currentPassword,
+
+            newPassword:
+              passwordData.newPassword,
+          }),
         }
       );
 
-      /*
-       * If backend is not created yet, we still show
-       * the settings locally.
-       */
+      const data = await response.json();
+
+      /* ================================================
+         HANDLE BACKEND ERROR
+         ================================================ */
 
       if (!response.ok) {
-        throw new Error("Unable to save settings.");
+        throw new Error(
+          data.message ||
+            "Unable to update password."
+        );
       }
 
-      setMessage("Settings saved successfully.");
+      /* ================================================
+         SUCCESS
+         ================================================ */
 
-      setTimeout(() => {
-        setMessage("");
-      }, 4000);
-    } catch (err) {
-      console.error("Settings save error:", err);
-
-      /*
-       * Temporary local success message.
-       * Remove this fallback when your API is ready.
-       */
-
-      setMessage(
-        "Settings updated locally. Connect the Settings API to save them permanently."
+      setSuccessMessage(
+        data.message ||
+          "Password updated successfully."
       );
 
-      setTimeout(() => {
-        setMessage("");
-      }, 5000);
+      /* Clear fields */
+
+      setPasswordData({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+
+    } catch (error) {
+      console.error(
+        "Change password error:",
+        error
+      );
+
+      setErrorMessage(
+        error.message ||
+          "Unable to update password. Please try again."
+      );
+
     } finally {
       setLoading(false);
     }
   };
 
-
   /* =====================================================
-     RESET SETTINGS
+     PASSWORD STRENGTH
      ===================================================== */
 
-  const resetSettings = () => {
-    setGeneralSettings({
-      systemName: "Staff Monitor",
-      organization: "Vanuatu Electoral Office",
-      language: "English",
-      timezone: "Pacific/Efate",
-      dateFormat: "DD MMM YYYY",
-      timeFormat: "12-hour",
-    });
+  const getPasswordStrength = () => {
+    const password = passwordData.newPassword;
 
-    setNotificationSettings({
-      emailNotifications: true,
-      attendanceAlerts: true,
-      leaveAlerts: true,
-      lateAlerts: true,
-      systemNotifications: true,
-    });
+    if (!password) {
+      return "";
+    }
 
-    setSecuritySettings({
-      sessionTimeout: "30",
-      passwordExpiry: "90",
-      requireStrongPassword: true,
-      loginNotifications: true,
-      twoFactorAuthentication: false,
-    });
+    if (password.length < 8) {
+      return "Weak";
+    }
 
-    setAttendanceSettings({
-      workStartTime: "08:00",
-      workEndTime: "16:30",
-      lateAfter: "08:15",
-      minimumWorkingHours: "8",
-      allowManualAttendance: true,
-      requireCheckOut: true,
-    });
+    let strength = 0;
 
-    setMessage("Settings have been reset.");
+    if (/[A-Z]/.test(password)) {
+      strength++;
+    }
 
-    setTimeout(() => {
-      setMessage("");
-    }, 3000);
+    if (/[a-z]/.test(password)) {
+      strength++;
+    }
+
+    if (/[0-9]/.test(password)) {
+      strength++;
+    }
+
+    if (/[^A-Za-z0-9]/.test(password)) {
+      strength++;
+    }
+
+    if (password.length >= 12) {
+      strength++;
+    }
+
+    if (strength <= 2) {
+      return "Weak";
+    }
+
+    if (strength === 3) {
+      return "Medium";
+    }
+
+    return "Strong";
   };
 
+  const passwordStrength =
+    getPasswordStrength();
+
+  /* =====================================================
+     FORMAT ROLE
+     ===================================================== */
+
+  const formatRole = (role) => {
+    if (!role) {
+      return "Not available";
+    }
+
+    return role
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (letter) =>
+        letter.toUpperCase()
+      );
+  };
+
+  /* =====================================================
+     RETURN
+     ===================================================== */
 
   return (
     <div className="settings-page">
@@ -318,12 +332,19 @@ const Settings = () => {
 
       <Sidebar />
 
-
       {/* =================================================
           MAIN CONTENT
           ================================================= */}
 
       <main className="settings-main">
+
+        {/* Watermark */}
+
+        <img
+          src={logo}
+          alt=""
+          className="settings-watermark"
+        />
 
         <div className="settings-content">
 
@@ -340,48 +361,12 @@ const Settings = () => {
               </div>
 
               <div>
-
                 <h1>Settings</h1>
 
                 <p>
-                  Manage system preferences, security and attendance settings
+                  Manage your account and security settings
                 </p>
-
               </div>
-
-            </div>
-
-
-            <div className="settings-header-actions">
-
-              <button
-                className="reset-button"
-                onClick={resetSettings}
-              >
-                <FiRefreshCw />
-                Reset
-              </button>
-
-
-              <button
-                className="save-button"
-                onClick={saveSettings}
-                disabled={loading}
-              >
-
-                {loading ? (
-                  <>
-                    <FiRefreshCw className="spin-icon" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <FiSave />
-                    Save Changes
-                  </>
-                )}
-
-              </button>
 
             </div>
 
@@ -392,13 +377,13 @@ const Settings = () => {
               SUCCESS MESSAGE
               ================================================= */}
 
-          {message && (
-            <div className="settings-message success">
+          {successMessage && (
+            <div className="settings-success">
 
               <FiCheckCircle />
 
               <span>
-                {message}
+                {successMessage}
               </span>
 
             </div>
@@ -409,13 +394,13 @@ const Settings = () => {
               ERROR MESSAGE
               ================================================= */}
 
-          {error && (
-            <div className="settings-message error">
+          {errorMessage && (
+            <div className="settings-error">
 
               <FiAlertCircle />
 
               <span>
-                {error}
+                {errorMessage}
               </span>
 
             </div>
@@ -423,1165 +408,465 @@ const Settings = () => {
 
 
           {/* =================================================
-              SETTINGS LAYOUT
+              SETTINGS GRID
               ================================================= */}
 
-          <div className="settings-layout">
-
-
-            {/* =================================================
-                SETTINGS NAVIGATION
-                ================================================= */}
-
-            <aside className="settings-navigation">
-
-              <button
-                className={
-                  activeSection === "general"
-                    ? "settings-nav-item active"
-                    : "settings-nav-item"
-                }
-                onClick={() => setActiveSection("general")}
-              >
-
-                <FiGlobe />
-
-                <div>
-                  <strong>General</strong>
-                  <span>System preferences</span>
-                </div>
-
-              </button>
-
-
-              <button
-                className={
-                  activeSection === "attendance"
-                    ? "settings-nav-item active"
-                    : "settings-nav-item"
-                }
-                onClick={() => setActiveSection("attendance")}
-              >
-
-                <FiCalendar />
-
-                <div>
-                  <strong>Attendance</strong>
-                  <span>Working hours & rules</span>
-                </div>
-
-              </button>
-
-
-              <button
-                className={
-                  activeSection === "notifications"
-                    ? "settings-nav-item active"
-                    : "settings-nav-item"
-                }
-                onClick={() => setActiveSection("notifications")}
-              >
-
-                <FiBell />
-
-                <div>
-                  <strong>Notifications</strong>
-                  <span>Alerts & messages</span>
-                </div>
-
-              </button>
-
-
-              <button
-                className={
-                  activeSection === "security"
-                    ? "settings-nav-item active"
-                    : "settings-nav-item"
-                }
-                onClick={() => setActiveSection("security")}
-              >
-
-                <FiShield />
-
-                <div>
-                  <strong>Security</strong>
-                  <span>Access & protection</span>
-                </div>
-
-              </button>
-
-
-              <button
-                className={
-                  activeSection === "database"
-                    ? "settings-nav-item active"
-                    : "settings-nav-item"
-                }
-                onClick={() => setActiveSection("database")}
-              >
-
-                <FiDatabase />
-
-                <div>
-                  <strong>Database</strong>
-                  <span>Database information</span>
-                </div>
-
-              </button>
-
-            </aside>
-
+          <section className="settings-grid">
 
             {/* =================================================
-                SETTINGS CONTENT
+                ACCOUNT INFORMATION
                 ================================================= */}
 
-            <section className="settings-card">
+            <div className="settings-panel">
+
+              <div className="settings-panel-header">
+
+                <div className="settings-panel-icon">
+                  <FiUser />
+                </div>
+
+                <div>
+
+                  <h2>
+                    Account Information
+                  </h2>
+
+                  <p>
+                    Your Staff Monitoring account
+                    information
+                  </p>
+
+                </div>
+
+              </div>
 
 
-              {/* =================================================
-                  GENERAL SETTINGS
-                  ================================================= */}
+              <div className="settings-form">
 
-              {activeSection === "general" && (
+                {/* Username */}
 
-                <div className="settings-section">
+                <div className="settings-field">
 
-                  <div className="section-heading">
+                  <label>
+                    Username
+                  </label>
 
-                    <div className="section-heading-icon">
-                      <FiGlobe />
-                    </div>
+                  <div className="settings-input-wrapper">
 
-                    <div>
+                    <FiUser />
 
-                      <h2>General Settings</h2>
-
-                      <p>
-                        Configure the basic information and appearance
-                        of your Staff Monitoring System.
-                      </p>
-
-                    </div>
-
-                  </div>
-
-
-                  <div className="settings-divider"></div>
-
-
-                  <div className="settings-form-grid">
-
-
-                    <div className="form-group">
-
-                      <label>
-                        System Name
-                      </label>
-
-                      <input
-                        type="text"
-                        value={generalSettings.systemName}
-                        onChange={(e) =>
-                          updateGeneral(
-                            "systemName",
-                            e.target.value
-                          )
-                        }
-                      />
-
-                    </div>
-
-
-                    <div className="form-group">
-
-                      <label>
-                        Organization
-                      </label>
-
-                      <input
-                        type="text"
-                        value={generalSettings.organization}
-                        onChange={(e) =>
-                          updateGeneral(
-                            "organization",
-                            e.target.value
-                          )
-                        }
-                      />
-
-                    </div>
-
-
-                    <div className="form-group">
-
-                      <label>
-                        Language
-                      </label>
-
-                      <select
-                        value={generalSettings.language}
-                        onChange={(e) =>
-                          updateGeneral(
-                            "language",
-                            e.target.value
-                          )
-                        }
-                      >
-
-                        <option value="English">
-                          English
-                        </option>
-
-                        <option value="Bislama">
-                          Bislama
-                        </option>
-
-                        <option value="French">
-                          French
-                        </option>
-
-                      </select>
-
-                    </div>
-
-
-                    <div className="form-group">
-
-                      <label>
-                        Time Zone
-                      </label>
-
-                      <select
-                        value={generalSettings.timezone}
-                        onChange={(e) =>
-                          updateGeneral(
-                            "timezone",
-                            e.target.value
-                          )
-                        }
-                      >
-
-                        <option value="Pacific/Efate">
-                          Pacific/Efate (Vanuatu)
-                        </option>
-
-                        <option value="Pacific/Guadalcanal">
-                          Pacific/Guadalcanal
-                        </option>
-
-                        <option value="Pacific/Auckland">
-                          Pacific/Auckland
-                        </option>
-
-                      </select>
-
-                    </div>
-
-
-                    <div className="form-group">
-
-                      <label>
-                        Date Format
-                      </label>
-
-                      <select
-                        value={generalSettings.dateFormat}
-                        onChange={(e) =>
-                          updateGeneral(
-                            "dateFormat",
-                            e.target.value
-                          )
-                        }
-                      >
-
-                        <option value="DD MMM YYYY">
-                          DD MMM YYYY
-                        </option>
-
-                        <option value="DD/MM/YYYY">
-                          DD/MM/YYYY
-                        </option>
-
-                        <option value="MM/DD/YYYY">
-                          MM/DD/YYYY
-                        </option>
-
-                        <option value="YYYY-MM-DD">
-                          YYYY-MM-DD
-                        </option>
-
-                      </select>
-
-                    </div>
-
-
-                    <div className="form-group">
-
-                      <label>
-                        Time Format
-                      </label>
-
-                      <select
-                        value={generalSettings.timeFormat}
-                        onChange={(e) =>
-                          updateGeneral(
-                            "timeFormat",
-                            e.target.value
-                          )
-                        }
-                      >
-
-                        <option value="12-hour">
-                          12-hour
-                        </option>
-
-                        <option value="24-hour">
-                          24-hour
-                        </option>
-
-                      </select>
-
-                    </div>
+                    <input
+                      type="text"
+                      value={
+                        user.username ||
+                        "Not available"
+                      }
+                      disabled
+                    />
 
                   </div>
 
                 </div>
 
-              )}
 
+                {/* Email */}
 
-              {/* =================================================
-                  ATTENDANCE SETTINGS
-                  ================================================= */}
+                <div className="settings-field">
 
-              {activeSection === "attendance" && (
+                  <label>
+                    Email Address
+                  </label>
 
-                <div className="settings-section">
+                  <div className="settings-input-wrapper">
 
-                  <div className="section-heading">
+                    <FiUser />
 
-                    <div className="section-heading-icon">
-                      <FiCalendar />
-                    </div>
-
-                    <div>
-
-                      <h2>Attendance Settings</h2>
-
-                      <p>
-                        Configure working hours and attendance rules.
-                      </p>
-
-                    </div>
-
-                  </div>
-
-
-                  <div className="settings-divider"></div>
-
-
-                  <div className="settings-form-grid">
-
-
-                    <div className="form-group">
-
-                      <label>
-                        <FiClock />
-                        Work Start Time
-                      </label>
-
-                      <input
-                        type="time"
-                        value={attendanceSettings.workStartTime}
-                        onChange={(e) =>
-                          updateAttendance(
-                            "workStartTime",
-                            e.target.value
-                          )
-                        }
-                      />
-
-                    </div>
-
-
-                    <div className="form-group">
-
-                      <label>
-                        <FiClock />
-                        Work End Time
-                      </label>
-
-                      <input
-                        type="time"
-                        value={attendanceSettings.workEndTime}
-                        onChange={(e) =>
-                          updateAttendance(
-                            "workEndTime",
-                            e.target.value
-                          )
-                        }
-                      />
-
-                    </div>
-
-
-                    <div className="form-group">
-
-                      <label>
-                        <FiClock />
-                        Mark Late After
-                      </label>
-
-                      <input
-                        type="time"
-                        value={attendanceSettings.lateAfter}
-                        onChange={(e) =>
-                          updateAttendance(
-                            "lateAfter",
-                            e.target.value
-                          )
-                        }
-                      />
-
-                    </div>
-
-
-                    <div className="form-group">
-
-                      <label>
-                        Minimum Working Hours
-                      </label>
-
-                      <input
-                        type="number"
-                        min="1"
-                        max="24"
-                        value={
-                          attendanceSettings.minimumWorkingHours
-                        }
-                        onChange={(e) =>
-                          updateAttendance(
-                            "minimumWorkingHours",
-                            e.target.value
-                          )
-                        }
-                      />
-
-                    </div>
-
-                  </div>
-
-
-                  <div className="settings-divider"></div>
-
-
-                  <div className="toggle-list">
-
-                    <div className="toggle-item">
-
-                      <div>
-
-                        <strong>
-                          Allow Manual Attendance
-                        </strong>
-
-                        <span>
-                          Allow administrators to manually
-                          add or correct attendance records.
-                        </span>
-
-                      </div>
-
-                      <label className="switch">
-
-                        <input
-                          type="checkbox"
-                          checked={
-                            attendanceSettings.allowManualAttendance
-                          }
-                          onChange={(e) =>
-                            updateAttendance(
-                              "allowManualAttendance",
-                              e.target.checked
-                            )
-                          }
-                        />
-
-                        <span className="slider"></span>
-
-                      </label>
-
-                    </div>
-
-
-                    <div className="toggle-item">
-
-                      <div>
-
-                        <strong>
-                          Require Check Out
-                        </strong>
-
-                        <span>
-                          Require employees to record their
-                          check-out time.
-                        </span>
-
-                      </div>
-
-                      <label className="switch">
-
-                        <input
-                          type="checkbox"
-                          checked={
-                            attendanceSettings.requireCheckOut
-                          }
-                          onChange={(e) =>
-                            updateAttendance(
-                              "requireCheckOut",
-                              e.target.checked
-                            )
-                          }
-                        />
-
-                        <span className="slider"></span>
-
-                      </label>
-
-                    </div>
+                    <input
+                      type="email"
+                      value={
+                        user.email ||
+                        "Not available"
+                      }
+                      disabled
+                    />
 
                   </div>
 
                 </div>
 
-              )}
 
+                {/* Employee ID */}
 
-              {/* =================================================
-                  NOTIFICATION SETTINGS
-                  ================================================= */}
+                <div className="settings-field">
 
-              {activeSection === "notifications" && (
+                  <label>
+                    Employee ID
+                  </label>
 
-                <div className="settings-section">
+                  <div className="settings-input-wrapper">
 
-                  <div className="section-heading">
+                    <FiUser />
 
-                    <div className="section-heading-icon">
-                      <FiBell />
-                    </div>
-
-                    <div>
-
-                      <h2>Notification Settings</h2>
-
-                      <p>
-                        Choose which notifications the system should send.
-                      </p>
-
-                    </div>
-
-                  </div>
-
-
-                  <div className="settings-divider"></div>
-
-
-                  <div className="toggle-list">
-
-                    <div className="toggle-item">
-
-                      <div>
-
-                        <strong>
-                          Email Notifications
-                        </strong>
-
-                        <span>
-                          Receive important system notifications
-                          through email.
-                        </span>
-
-                      </div>
-
-                      <label className="switch">
-
-                        <input
-                          type="checkbox"
-                          checked={
-                            notificationSettings.emailNotifications
-                          }
-                          onChange={(e) =>
-                            updateNotifications(
-                              "emailNotifications",
-                              e.target.checked
-                            )
-                          }
-                        />
-
-                        <span className="slider"></span>
-
-                      </label>
-
-                    </div>
-
-
-                    <div className="toggle-item">
-
-                      <div>
-
-                        <strong>
-                          Attendance Alerts
-                        </strong>
-
-                        <span>
-                          Receive notifications about attendance
-                          problems.
-                        </span>
-
-                      </div>
-
-                      <label className="switch">
-
-                        <input
-                          type="checkbox"
-                          checked={
-                            notificationSettings.attendanceAlerts
-                          }
-                          onChange={(e) =>
-                            updateNotifications(
-                              "attendanceAlerts",
-                              e.target.checked
-                            )
-                          }
-                        />
-
-                        <span className="slider"></span>
-
-                      </label>
-
-                    </div>
-
-
-                    <div className="toggle-item">
-
-                      <div>
-
-                        <strong>
-                          Leave Alerts
-                        </strong>
-
-                        <span>
-                          Receive notifications when leave
-                          requests are submitted.
-                        </span>
-
-                      </div>
-
-                      <label className="switch">
-
-                        <input
-                          type="checkbox"
-                          checked={
-                            notificationSettings.leaveAlerts
-                          }
-                          onChange={(e) =>
-                            updateNotifications(
-                              "leaveAlerts",
-                              e.target.checked
-                            )
-                          }
-                        />
-
-                        <span className="slider"></span>
-
-                      </label>
-
-                    </div>
-
-
-                    <div className="toggle-item">
-
-                      <div>
-
-                        <strong>
-                          Late Attendance Alerts
-                        </strong>
-
-                        <span>
-                          Notify administrators when employees
-                          arrive late.
-                        </span>
-
-                      </div>
-
-                      <label className="switch">
-
-                        <input
-                          type="checkbox"
-                          checked={
-                            notificationSettings.lateAlerts
-                          }
-                          onChange={(e) =>
-                            updateNotifications(
-                              "lateAlerts",
-                              e.target.checked
-                            )
-                          }
-                        />
-
-                        <span className="slider"></span>
-
-                      </label>
-
-                    </div>
-
-
-                    <div className="toggle-item">
-
-                      <div>
-
-                        <strong>
-                          System Notifications
-                        </strong>
-
-                        <span>
-                          Receive important application and
-                          maintenance notifications.
-                        </span>
-
-                      </div>
-
-                      <label className="switch">
-
-                        <input
-                          type="checkbox"
-                          checked={
-                            notificationSettings.systemNotifications
-                          }
-                          onChange={(e) =>
-                            updateNotifications(
-                              "systemNotifications",
-                              e.target.checked
-                            )
-                          }
-                        />
-
-                        <span className="slider"></span>
-
-                      </label>
-
-                    </div>
+                    <input
+                      type="text"
+                      value={
+                        user.employee_id ||
+                        "Not available"
+                      }
+                      disabled
+                    />
 
                   </div>
 
                 </div>
 
-              )}
 
+                {/* Role */}
 
-              {/* =================================================
-                  SECURITY SETTINGS
-                  ================================================= */}
+                <div className="settings-field">
 
-              {activeSection === "security" && (
+                  <label>
+                    System Role
+                  </label>
 
-                <div className="settings-section">
-
-                  <div className="section-heading">
-
-                    <div className="section-heading-icon">
-                      <FiShield />
-                    </div>
-
-                    <div>
-
-                      <h2>Security Settings</h2>
-
-                      <p>
-                        Manage login security and account protection.
-                      </p>
-
-                    </div>
-
-                  </div>
-
-
-                  <div className="settings-divider"></div>
-
-
-                  <div className="settings-form-grid">
-
-
-                    <div className="form-group">
-
-                      <label>
-                        <FiLock />
-                        Session Timeout
-                      </label>
-
-                      <select
-                        value={
-                          securitySettings.sessionTimeout
-                        }
-                        onChange={(e) =>
-                          updateSecurity(
-                            "sessionTimeout",
-                            e.target.value
-                          )
-                        }
-                      >
-
-                        <option value="15">
-                          15 minutes
-                        </option>
-
-                        <option value="30">
-                          30 minutes
-                        </option>
-
-                        <option value="60">
-                          1 hour
-                        </option>
-
-                        <option value="120">
-                          2 hours
-                        </option>
-
-                      </select>
-
-                    </div>
-
-
-                    <div className="form-group">
-
-                      <label>
-                        Password Expiry
-                      </label>
-
-                      <select
-                        value={
-                          securitySettings.passwordExpiry
-                        }
-                        onChange={(e) =>
-                          updateSecurity(
-                            "passwordExpiry",
-                            e.target.value
-                          )
-                        }
-                      >
-
-                        <option value="30">
-                          30 days
-                        </option>
-
-                        <option value="60">
-                          60 days
-                        </option>
-
-                        <option value="90">
-                          90 days
-                        </option>
-
-                        <option value="never">
-                          Never
-                        </option>
-
-                      </select>
-
-                    </div>
-
-                  </div>
-
-
-                  <div className="settings-divider"></div>
-
-
-                  <div className="toggle-list">
-
-                    <div className="toggle-item">
-
-                      <div>
-
-                        <strong>
-                          Require Strong Password
-                        </strong>
-
-                        <span>
-                          Require users to create secure passwords.
-                        </span>
-
-                      </div>
-
-                      <label className="switch">
-
-                        <input
-                          type="checkbox"
-                          checked={
-                            securitySettings.requireStrongPassword
-                          }
-                          onChange={(e) =>
-                            updateSecurity(
-                              "requireStrongPassword",
-                              e.target.checked
-                            )
-                          }
-                        />
-
-                        <span className="slider"></span>
-
-                      </label>
-
-                    </div>
-
-
-                    <div className="toggle-item">
-
-                      <div>
-
-                        <strong>
-                          Login Notifications
-                        </strong>
-
-                        <span>
-                          Notify administrators about account
-                          login activity.
-                        </span>
-
-                      </div>
-
-                      <label className="switch">
-
-                        <input
-                          type="checkbox"
-                          checked={
-                            securitySettings.loginNotifications
-                          }
-                          onChange={(e) =>
-                            updateSecurity(
-                              "loginNotifications",
-                              e.target.checked
-                            )
-                          }
-                        />
-
-                        <span className="slider"></span>
-
-                      </label>
-
-                    </div>
-
-
-                    <div className="toggle-item">
-
-                      <div>
-
-                        <strong>
-                          Two-Factor Authentication
-                        </strong>
-
-                        <span>
-                          Add an additional verification step
-                          when users sign in.
-                        </span>
-
-                      </div>
-
-                      <label className="switch">
-
-                        <input
-                          type="checkbox"
-                          checked={
-                            securitySettings.twoFactorAuthentication
-                          }
-                          onChange={(e) =>
-                            updateSecurity(
-                              "twoFactorAuthentication",
-                              e.target.checked
-                            )
-                          }
-                        />
-
-                        <span className="slider"></span>
-
-                      </label>
-
-                    </div>
-
-                  </div>
-
-
-                  <div className="security-note">
+                  <div className="settings-input-wrapper">
 
                     <FiShield />
 
-                    <div>
-
-                      <strong>
-                        Security Recommendation
-                      </strong>
-
-                      <p>
-                        We recommend enabling strong passwords,
-                        login notifications and two-factor
-                        authentication for administrator accounts.
-                      </p>
-
-                    </div>
+                    <input
+                      type="text"
+                      value={formatRole(user.role)}
+                      disabled
+                    />
 
                   </div>
 
                 </div>
 
-              )}
+              </div>
+
+            </div>
 
 
-              {/* =================================================
-                  DATABASE
-                  ================================================= */}
+            {/* =================================================
+                CHANGE PASSWORD
+                ================================================= */}
 
-              {activeSection === "database" && (
+            <div className="settings-panel">
 
-                <div className="settings-section">
+              <div className="settings-panel-header">
 
-                  <div className="section-heading">
+                <div className="settings-panel-icon">
+                  <FiLock />
+                </div>
 
-                    <div className="section-heading-icon">
-                      <FiDatabase />
-                    </div>
+                <div>
 
-                    <div>
+                  <h2>
+                    Change Password
+                  </h2>
 
-                      <h2>Database</h2>
+                  <p>
+                    Update your Staff Monitoring
+                    account password
+                  </p>
 
-                      <p>
-                        View information about the Staff Monitor
-                        PostgreSQL database.
-                      </p>
+                </div>
 
-                    </div>
-
-                  </div>
-
-
-                  <div className="settings-divider"></div>
+              </div>
 
 
-                  <div className="database-status">
+              <form
+                className="settings-form"
+                onSubmit={handleChangePassword}
+              >
 
-                    <div className="database-status-icon">
-                      <FiDatabase />
-                    </div>
+                {/* =================================================
+                    CURRENT PASSWORD
+                    ================================================= */}
 
-                    <div>
+                <div className="settings-field">
 
-                      <strong>
-                        PostgreSQL Database
-                      </strong>
+                  <label htmlFor="currentPassword">
+                    Current Password
+                  </label>
 
-                      <span>
-                        Database connection is managed by the
-                        backend server.
-                      </span>
+                  <div className="settings-input-wrapper">
 
-                    </div>
+                    <FiLock />
 
-                    <div className="connection-status">
+                    <input
+                      id="currentPassword"
+                      name="currentPassword"
+                      type={
+                        showCurrentPassword
+                          ? "text"
+                          : "password"
+                      }
+                      value={
+                        passwordData.currentPassword
+                      }
+                      onChange={
+                        handlePasswordChange
+                      }
+                      placeholder="Enter current password"
+                      autoComplete="current-password"
+                    />
 
-                      <span></span>
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() =>
+                        setShowCurrentPassword(
+                          (previous) => !previous
+                        )
+                      }
+                      aria-label={
+                        showCurrentPassword
+                          ? "Hide current password"
+                          : "Show current password"
+                      }
+                    >
 
-                      Connected
+                      {showCurrentPassword ? (
+                        <FiEyeOff />
+                      ) : (
+                        <FiEye />
+                      )}
 
-                    </div>
-
-                  </div>
-
-
-                  <div className="database-info-grid">
-
-                    <div className="database-info-card">
-
-                      <span>
-                        Database Type
-                      </span>
-
-                      <strong>
-                        PostgreSQL
-                      </strong>
-
-                    </div>
-
-
-                    <div className="database-info-card">
-
-                      <span>
-                        Database Name
-                      </span>
-
-                      <strong>
-                        staff_monitor
-                      </strong>
-
-                    </div>
-
-
-                    <div className="database-info-card">
-
-                      <span>
-                        Application
-                      </span>
-
-                      <strong>
-                        Staff Monitoring System
-                      </strong>
-
-                    </div>
-
-
-                    <div className="database-info-card">
-
-                      <span>
-                        API
-                      </span>
-
-                      <strong>
-                        Node.js / Express
-                      </strong>
-
-                    </div>
-
-                  </div>
-
-
-                  <div className="database-warning">
-
-                    <FiAlertCircle />
-
-                    <div>
-
-                      <strong>
-                        Important
-                      </strong>
-
-                      <p>
-                        PostgreSQL credentials should never be stored
-                        directly inside React files. Keep your database
-                        password and connection details inside the
-                        backend environment variables.
-                      </p>
-
-                    </div>
+                    </button>
 
                   </div>
 
                 </div>
 
-              )}
 
-            </section>
+                {/* =================================================
+                    NEW PASSWORD
+                    ================================================= */}
 
-          </div>
+                <div className="settings-field">
+
+                  <label htmlFor="newPassword">
+                    New Password
+                  </label>
+
+                  <div className="settings-input-wrapper">
+
+                    <FiLock />
+
+                    <input
+                      id="newPassword"
+                      name="newPassword"
+                      type={
+                        showNewPassword
+                          ? "text"
+                          : "password"
+                      }
+                      value={
+                        passwordData.newPassword
+                      }
+                      onChange={
+                        handlePasswordChange
+                      }
+                      placeholder="Enter new password"
+                      autoComplete="new-password"
+                    />
+
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() =>
+                        setShowNewPassword(
+                          (previous) => !previous
+                        )
+                      }
+                      aria-label={
+                        showNewPassword
+                          ? "Hide new password"
+                          : "Show new password"
+                      }
+                    >
+
+                      {showNewPassword ? (
+                        <FiEyeOff />
+                      ) : (
+                        <FiEye />
+                      )}
+
+                    </button>
+
+                  </div>
+
+
+                  {/* Password strength */}
+
+                  {passwordData.newPassword && (
+                    <div className="password-strength">
+
+                      <span>
+                        Password strength:
+                      </span>
+
+                      <strong
+                        className={`strength-${passwordStrength.toLowerCase()}`}
+                      >
+                        {passwordStrength}
+                      </strong>
+
+                    </div>
+                  )}
+
+
+                  <small className="field-help">
+                    Use at least 8 characters. A stronger
+                    password should include uppercase letters,
+                    lowercase letters, numbers and symbols.
+                  </small>
+
+                </div>
+
+
+                {/* =================================================
+                    CONFIRM PASSWORD
+                    ================================================= */}
+
+                <div className="settings-field">
+
+                  <label htmlFor="confirmPassword">
+                    Confirm New Password
+                  </label>
+
+                  <div className="settings-input-wrapper">
+
+                    <FiLock />
+
+                    <input
+                      id="confirmPassword"
+                      name="confirmPassword"
+                      type={
+                        showConfirmPassword
+                          ? "text"
+                          : "password"
+                      }
+                      value={
+                        passwordData.confirmPassword
+                      }
+                      onChange={
+                        handlePasswordChange
+                      }
+                      placeholder="Confirm new password"
+                      autoComplete="new-password"
+                    />
+
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() =>
+                        setShowConfirmPassword(
+                          (previous) => !previous
+                        )
+                      }
+                      aria-label={
+                        showConfirmPassword
+                          ? "Hide confirm password"
+                          : "Show confirm password"
+                      }
+                    >
+
+                      {showConfirmPassword ? (
+                        <FiEyeOff />
+                      ) : (
+                        <FiEye />
+                      )}
+
+                    </button>
+
+                  </div>
+
+
+                  {/* Password match */}
+
+                  {passwordData.confirmPassword && (
+                    <div
+                      className={
+                        passwordData.newPassword ===
+                        passwordData.confirmPassword
+                          ? "password-match"
+                          : "password-not-match"
+                      }
+                    >
+
+                      {passwordData.newPassword ===
+                      passwordData.confirmPassword
+                        ? "✓ Passwords match"
+                        : "✕ Passwords do not match"}
+
+                    </div>
+                  )}
+
+                </div>
+
+
+                {/* =================================================
+                    CHANGE PASSWORD BUTTON
+                    ================================================= */}
+
+                <button
+                  type="submit"
+                  className="save-password-button"
+                  disabled={loading}
+                >
+
+                  {loading ? (
+                    <>
+                      <span className="button-spinner"></span>
+
+                      Updating Password...
+                    </>
+                  ) : (
+                    <>
+                      <FiSave />
+
+                      Change Password
+                    </>
+                  )}
+
+                </button>
+
+              </form>
+
+            </div>
+
+          </section>
+
+
+          {/* =================================================
+              SECURITY INFORMATION
+              ================================================= */}
+
+          <section className="security-information">
+
+            <div className="security-icon">
+              <FiShield />
+            </div>
+
+            <div>
+
+              <h3>
+                Password Security
+              </h3>
+
+              <p>
+                Your password is securely stored using
+                bcrypt on the server. The encrypted
+                password stored in PostgreSQL cannot be
+                decrypted and displayed as plain text.
+              </p>
+
+            </div>
+
+          </section>
 
         </div>
 
@@ -1592,3 +877,4 @@ const Settings = () => {
 };
 
 export default Settings;
+
