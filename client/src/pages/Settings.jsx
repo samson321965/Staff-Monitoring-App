@@ -15,9 +15,8 @@ import Sidebar from "../components/Sidebar";
 import logo from "../assets/images/logo.png";
 
 import "../styles/Settings.css";
-
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { buildApiUrl } from "../config/api";
+import { getAuthHeaders } from "../utils/auth";
 
 const Settings = () => {
   /* =====================================================
@@ -165,20 +164,10 @@ const Settings = () => {
       return;
     }
 
-    /* Get JWT token */
-
-    const token = localStorage.getItem("token");
-
-    if (!token) {
-      setErrorMessage(
-        "Your login session has expired. Please log in again."
-      );
-
-      return;
-    }
-
     try {
       setLoading(true);
+
+      const headers = getAuthHeaders();
 
       /* ================================================
          SEND REQUEST TO BACKEND
@@ -187,13 +176,12 @@ const Settings = () => {
          ================================================ */
 
       const response = await fetch(
-        `${API_URL}/auth/change-password`,
+        buildApiUrl("/auth/change-password"),
         {
           method: "PUT",
 
           headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            ...headers,
           },
 
           body: JSON.stringify({

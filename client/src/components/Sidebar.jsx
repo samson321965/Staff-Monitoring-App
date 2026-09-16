@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import "../styles/Sidebar.css";
 import {
 FaTachometerAlt,
@@ -13,6 +13,13 @@ FaSignOutAlt
 import logo from "../assets/images/logo.png";
 
 function Sidebar() {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/", { replace: true });
+  };
 
 return (
 
@@ -67,9 +74,9 @@ return (
         </li>
 
         <li>
-            <NavLink to="/">
+            <button type="button" className="logout-button" onClick={handleLogout}>
                 <FaSignOutAlt /> Logout
-            </NavLink>
+            </button>
         </li>
 
     </ul>

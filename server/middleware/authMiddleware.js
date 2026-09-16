@@ -1,5 +1,15 @@
 const jwt = require("jsonwebtoken");
 
+const getJwtSecret = () => {
+    const secret = process.env.JWT_SECRET;
+
+    if (!secret) {
+        throw new Error("JWT_SECRET is not configured. Check server/.env");
+    }
+
+    return secret;
+};
+
 // ==========================================
 // VERIFY JWT TOKEN
 // ==========================================
@@ -15,10 +25,7 @@ const authenticateToken = (req, res, next) => {
 
         const token = authHeader.split(" ")[1];
 
-        const decoded = jwt.verify(
-            token,
-            process.env.JWT_SECRET || "staff_monitor_secret"
-        );
+        const decoded = jwt.verify(token, getJwtSecret());
 
         req.user = decoded;
 

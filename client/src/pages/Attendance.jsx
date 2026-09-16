@@ -17,6 +17,8 @@ import {
 
 import Sidebar from "../components/Sidebar";
 import "../styles/Attendance.css";
+import { buildApiUrl } from "../config/api";
+import { getAuthHeaders } from "../utils/auth";
 
 const Attendance = () => {
   /* =====================================================
@@ -65,26 +67,37 @@ const Attendance = () => {
     setLoading(true);
     setError("");
 
-    fetch("http://localhost:5000/api/attendance")
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Failed to fetch attendance data");
-        }
+    try {
+      const headers = getAuthHeaders();
 
-        return response.json();
+      fetch(buildApiUrl("/attendance"), {
+        method: "GET",
+        headers,
       })
-      .then((data) => {
-        console.log("Attendance data from API:", data);
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Failed to fetch attendance data");
+          }
 
-        setAttendanceData(data);
-        setLoading(false);
-      })
-      .catch((error) => {
-        console.error("Attendance fetch error:", error);
+          return response.json();
+        })
+        .then((data) => {
+          console.log("Attendance data from API:", data);
 
-        setError("Unable to load attendance data.");
-        setLoading(false);
-      });
+          setAttendanceData(data);
+          setLoading(false);
+        })
+        .catch((error) => {
+          console.error("Attendance fetch error:", error);
+
+          setError("Unable to load attendance data.");
+          setLoading(false);
+        });
+    } catch (error) {
+      console.error("Authentication token not found.", error);
+      setError("Please login again. Authentication token is missing.");
+      setLoading(false);
+    }
   };
 
   /* =====================================================
@@ -92,21 +105,13 @@ const Attendance = () => {
   ===================================================== */
 
 const fetchEmployees = () => {
-  const token = localStorage.getItem("token");
+  try {
+    const headers = getAuthHeaders();
 
-  if (!token) {
-    console.error("Authentication token not found.");
-    setFormError("Please login again. Authentication token is missing.");
-    return;
-  }
-
-  fetch("http://localhost:5000/api/employees", {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  })
+    fetch(buildApiUrl("/employees"), {
+      method: "GET",
+      headers,
+    })
     .then(async (response) => {
       const data = await response.json().catch(() => ({}));
 
@@ -134,6 +139,10 @@ const fetchEmployees = () => {
           "Unable to load employees. Please check the employee API."
       );
     });
+  } catch (error) {
+    console.error("Authentication token not found.", error);
+    setFormError("Please login again. Authentication token is missing.");
+  }
 };
 
   /* =====================================================
@@ -564,7 +573,7 @@ const fetchEmployees = () => {
 
     try {
       const response = await fetch(
-        "http://localhost:5000/api/attendance",
+        buildApiUrl("/attendance"),
         {
           method: "POST",
 

@@ -1,4 +1,6 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+
+import { isAuthenticated } from "./utils/auth";
 
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -9,38 +11,85 @@ import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Share from "./pages/Share";
 
+const ProtectedRoute = ({ children }) => {
+  if (!isAuthenticated()) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+};
 
 function App() {
-
   return (
-
     <BrowserRouter>
-
       <Routes>
-
         <Route path="/" element={<Login />} />
 
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
 
-        <Route path="/employees" element={<Employees />} />
+        <Route
+          path="/employees"
+          element={
+            <ProtectedRoute>
+              <Employees />
+            </ProtectedRoute>
+          }
+        />
 
-        <Route path="/attendance" element={<Attendance />} />
+        <Route
+          path="/attendance"
+          element={
+            <ProtectedRoute>
+              <Attendance />
+            </ProtectedRoute>
+          }
+        />
 
-        <Route path="/leave" element={<Leave />} />
+        <Route
+          path="/leave"
+          element={
+            <ProtectedRoute>
+              <Leave />
+            </ProtectedRoute>
+          }
+        />
 
-        <Route path="/reports" element={<Reports />} />
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute>
+              <Reports />
+            </ProtectedRoute>
+          }
+        />
 
-        <Route path="/settings" element={<Settings />} />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
 
-        <Route path="/share" element={<Share />} />
-
+        <Route
+          path="/share"
+          element={
+            <ProtectedRoute>
+              <Share />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
-
     </BrowserRouter>
-
   );
-
 }
-
 
 export default App;

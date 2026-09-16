@@ -17,6 +17,8 @@ import {
 
 import Sidebar from "../components/Sidebar";
 import "../styles/Dashboard.css";
+import { buildApiUrl } from "../config/api";
+import { getAuthHeaders } from "../utils/auth";
 
 function Dashboard() {
   const [dashboardData, setDashboardData] = useState({
@@ -45,9 +47,10 @@ function Dashboard() {
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        "http://localhost:5000/api/dashboard"
-      );
+      const response = await fetch(buildApiUrl("/dashboard"), {
+        method: "GET",
+        headers: getAuthHeaders(),
+      });
 
       if (!response.ok) {
         throw new Error("Failed to fetch dashboard data");

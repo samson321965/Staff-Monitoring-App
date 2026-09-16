@@ -18,8 +18,10 @@ import {
 
 import Sidebar from "../components/Sidebar";
 import "../styles/Leave.css";
+import { buildApiUrl } from "../config/api";
+import { getAuthHeaders } from "../utils/auth";
 
-const API_URL = "http://localhost:5000/api/leaves";
+const API_URL = buildApiUrl("/leaves");
 
 const Leave = () => {
   /* =====================================================
@@ -76,7 +78,9 @@ const Leave = () => {
       setLoading(true);
       setError("");
 
-      const response = await fetch(API_URL);
+      const response = await fetch(API_URL, {
+        headers: getAuthHeaders(),
+      });
 
       if (!response.ok) {
         throw new Error(
@@ -110,9 +114,9 @@ const Leave = () => {
 
   const fetchEmployees = async () => {
     try {
-      const response = await fetch(
-        `${API_URL}/employees`
-      );
+      const response = await fetch(buildApiUrl("/employees"), {
+        headers: getAuthHeaders(),
+      });
 
       if (!response.ok) {
         throw new Error(

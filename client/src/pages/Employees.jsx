@@ -17,18 +17,20 @@ import {
 
 import Sidebar from "../components/Sidebar";
 import "../styles/Employees.css";
+import { buildApiUrl } from "../config/api";
+import { getAuthHeaders } from "../utils/auth";
 
 // ============================================================
 // API URLS
 // ============================================================
 
-const API_URL = "http://localhost:5000/api/employees";
+const API_URL = buildApiUrl("/employees");
 
 const DEPARTMENTS_API_URL =
-  "http://localhost:5000/api/departments";
+  buildApiUrl("/departments");
 
 const POSITIONS_API_URL =
-  "http://localhost:5000/api/positions";
+  buildApiUrl("/positions");
 
 // ============================================================
 // EMPLOYEES COMPONENT
@@ -97,20 +99,7 @@ function Employees() {
   // GET JWT TOKEN
   // ==========================================================
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem("token");
-
-    if (!token) {
-      throw new Error(
-        "Authentication token not found. Please login again."
-      );
-    }
-
-    return {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    };
-  };
+  const getAuthHeadersForRequest = () => getAuthHeaders();
 
   // ==========================================================
   // FETCH EMPLOYEES
@@ -123,7 +112,7 @@ function Employees() {
 
       const response = await fetch(API_URL, {
         method: "GET",
-        headers: getAuthHeaders(),
+        headers: getAuthHeadersForRequest(),
       });
 
       const data = await response
@@ -214,7 +203,7 @@ function Employees() {
         DEPARTMENTS_API_URL,
         {
           method: "GET",
-          headers: getAuthHeaders(),
+          headers: getAuthHeadersForRequest(),
         }
       );
 
@@ -253,7 +242,7 @@ function Employees() {
         POSITIONS_API_URL,
         {
           method: "GET",
-          headers: getAuthHeaders(),
+          headers: getAuthHeadersForRequest(),
         }
       );
 

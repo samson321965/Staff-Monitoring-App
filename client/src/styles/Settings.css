@@ -1,5 +1,12 @@
 /* =========================================================
+   STAFF MONITORING APP
    SETTINGS PAGE
+   Professional Dark Navy / Blue Theme
+   ========================================================= */
+
+
+/* =========================================================
+   PAGE
    ========================================================= */
 
 .settings-page {
@@ -29,7 +36,7 @@
 
 
 /* =========================================================
-   MAIN
+   MAIN CONTENT
    ========================================================= */
 
 .settings-main {
@@ -43,19 +50,55 @@
 
   background:
     radial-gradient(
-      circle at 75% 5%,
-      rgba(31, 92, 190, 0.18),
+      circle at 85% 5%,
+      rgba(35, 105, 220, 0.16),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 15% 85%,
+      rgba(21, 73, 155, 0.08),
       transparent 35%
     );
 }
 
+
+/* =========================================================
+   CONTENT CONTAINER
+   ========================================================= */
 
 .settings-content {
   position: relative;
 
   z-index: 2;
 
-  padding: 32px 35px 45px;
+  width: 100%;
+  max-width: 1500px;
+
+  margin: 0 auto;
+
+  padding: 32px 35px 50px;
+}
+
+
+/* =========================================================
+   WATERMARK
+   ========================================================= */
+
+.settings-watermark {
+  position: fixed;
+
+  right: 30px;
+  bottom: 25px;
+
+  width: 260px;
+
+  opacity: 0.025;
+
+  pointer-events: none;
+
+  user-select: none;
+
+  z-index: 0;
 }
 
 
@@ -72,7 +115,7 @@
 
   gap: 25px;
 
-  margin-bottom: 22px;
+  margin-bottom: 25px;
 }
 
 
@@ -94,7 +137,9 @@
   align-items: center;
   justify-content: center;
 
-  border-radius: 11px;
+  flex-shrink: 0;
+
+  border-radius: 12px;
 
   background:
     linear-gradient(
@@ -105,339 +150,219 @@
 
   color: #ffffff;
 
-  font-size: 27px;
+  font-size: 26px;
+
+  box-shadow:
+    0 8px 22px rgba(15, 76, 190, 0.25);
 }
 
 
 .settings-title h1 {
   margin: 0;
 
-  font-size: 31px;
+  color: #ffffff;
+
+  font-size: 30px;
 
   font-weight: 700;
 
-  color: #ffffff;
+  letter-spacing: -0.3px;
 }
 
 
 .settings-title p {
   margin: 5px 0 0;
 
-  color: #aebbd0;
+  color: #9eacc1;
 
   font-size: 12px;
+
+  font-weight: 400;
 }
 
 
 /* =========================================================
-   HEADER BUTTONS
+   SUCCESS / ERROR MESSAGES
    ========================================================= */
 
-.settings-header-actions {
+.settings-success,
+.settings-error {
+  min-height: 46px;
+
+  margin-bottom: 18px;
+
+  padding: 11px 15px;
+
   display: flex;
 
   align-items: center;
 
   gap: 10px;
+
+  border-radius: 9px;
+
+  font-size: 11px;
+
+  font-weight: 500;
+
+  animation: settingsMessageIn 0.25s ease;
 }
 
 
-.reset-button,
-.save-button {
-  height: 43px;
-
-  padding: 0 17px;
-
-  display: flex;
-
-  align-items: center;
-  justify-content: center;
-
-  gap: 7px;
-
-  border-radius: 7px;
-
-  font-family: inherit;
-
-  font-size: 10px;
-
-  font-weight: 600;
-
-  cursor: pointer;
-}
-
-
-.reset-button {
-  border: 1px solid rgba(76, 112, 158, 0.5);
-
-  background: rgba(7, 29, 65, 0.8);
-
-  color: #cbd7e8;
-}
-
-
-.reset-button:hover {
-  background: #102c5a;
-}
-
-
-.save-button {
-  border: none;
+.settings-success {
+  border: 1px solid rgba(34, 211, 124, 0.28);
 
   background:
     linear-gradient(
       135deg,
-      #1d5de0,
-      #124dc5
+      rgba(16, 189, 104, 0.12),
+      rgba(16, 189, 104, 0.05)
     );
 
-  color: #ffffff;
+  color: #5ee39b;
+
+  box-shadow:
+    0 5px 18px rgba(0, 0, 0, 0.08);
 }
 
 
-.save-button:hover {
-  filter: brightness(1.1);
+.settings-success svg {
+  width: 17px;
+  height: 17px;
+
+  flex-shrink: 0;
 }
 
 
-.save-button:disabled {
-  opacity: 0.6;
+.settings-error {
+  border: 1px solid rgba(239, 68, 68, 0.3);
 
-  cursor: not-allowed;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(239, 68, 68, 0.12),
+      rgba(239, 68, 68, 0.05)
+    );
+
+  color: #ff8d8d;
+
+  box-shadow:
+    0 5px 18px rgba(0, 0, 0, 0.08);
 }
 
 
-.spin-icon {
-  animation: settingsSpin 1s linear infinite;
+.settings-error svg {
+  width: 17px;
+  height: 17px;
+
+  flex-shrink: 0;
 }
 
 
-@keyframes settingsSpin {
-
+@keyframes settingsMessageIn {
   from {
-    transform: rotate(0deg);
+    opacity: 0;
+    transform: translateY(-5px);
   }
 
   to {
-    transform: rotate(360deg);
+    opacity: 1;
+    transform: translateY(0);
   }
-
 }
 
 
 /* =========================================================
-   MESSAGES
+   SETTINGS GRID
    ========================================================= */
 
-.settings-message {
-  min-height: 43px;
-
-  margin-bottom: 15px;
-
-  padding: 0 15px;
-
-  display: flex;
-
-  align-items: center;
-
-  gap: 9px;
-
-  border-radius: 8px;
-
-  font-size: 10px;
-}
-
-
-.settings-message.success {
-  border: 1px solid rgba(16, 189, 104, 0.35);
-
-  background: rgba(16, 189, 104, 0.1);
-
-  color: #62e6a1;
-}
-
-
-.settings-message.error {
-  border: 1px solid rgba(239, 65, 65, 0.35);
-
-  background: rgba(239, 65, 65, 0.1);
-
-  color: #ff8b8b;
-}
-
-
-/* =========================================================
-   SETTINGS LAYOUT
-   ========================================================= */
-
-.settings-layout {
+.settings-grid {
   display: grid;
 
-  grid-template-columns: 250px minmax(0, 1fr);
+  grid-template-columns:
+    minmax(0, 0.9fr)
+    minmax(0, 1.1fr);
 
-  gap: 12px;
+  gap: 20px;
 
   align-items: start;
 }
 
 
 /* =========================================================
-   NAVIGATION
+   SETTINGS PANEL
    ========================================================= */
 
-.settings-navigation {
-  padding: 10px;
+.settings-panel {
+  position: relative;
 
-  border: 1px solid rgba(74, 106, 150, 0.3);
-
-  border-radius: 10px;
-
-  background:
-    linear-gradient(
-      145deg,
-      rgba(9, 31, 70, 0.97),
-      rgba(6, 23, 52, 0.97)
-    );
-}
-
-
-.settings-nav-item {
-  width: 100%;
-
-  min-height: 64px;
-
-  padding: 10px;
-
-  display: flex;
-
-  align-items: center;
-
-  gap: 12px;
-
-  border: none;
-
-  border-radius: 8px;
-
-  background: transparent;
-
-  color: #aebbd0;
-
-  font-family: inherit;
-
-  text-align: left;
-
-  cursor: pointer;
-
-  transition: 0.2s ease;
-}
-
-
-.settings-nav-item:hover {
-  background: rgba(31, 83, 163, 0.2);
-
-  color: #ffffff;
-}
-
-
-.settings-nav-item.active {
-  background:
-    linear-gradient(
-      135deg,
-      #205bd5,
-      #164ab6
-    );
-
-  color: #ffffff;
-
-  box-shadow:
-    0 6px 20px
-    rgba(13, 66, 170, 0.25);
-}
-
-
-.settings-nav-item > svg {
-  width: 19px;
-  height: 19px;
-
-  flex-shrink: 0;
-}
-
-
-.settings-nav-item div {
-  display: flex;
-
-  flex-direction: column;
-
-  gap: 3px;
-}
-
-
-.settings-nav-item strong {
-  font-size: 10px;
-
-  font-weight: 600;
-}
-
-
-.settings-nav-item span {
-  color: #7f91ab;
-
-  font-size: 8px;
-}
-
-
-.settings-nav-item.active span {
-  color: #c3d4f5;
-}
-
-
-/* =========================================================
-   MAIN SETTINGS CARD
-   ========================================================= */
-
-.settings-card {
-  min-height: 600px;
+  min-width: 0;
 
   padding: 25px;
 
-  border: 1px solid rgba(74, 106, 150, 0.3);
+  border:
+    1px solid
+    rgba(76, 108, 149, 0.30);
 
-  border-radius: 10px;
+  border-radius: 12px;
 
   background:
     linear-gradient(
       145deg,
-      rgba(9, 31, 70, 0.97),
-      rgba(6, 23, 52, 0.97)
+      rgba(9, 31, 70, 0.98),
+      rgba(6, 23, 52, 0.98)
     );
 
   box-shadow:
-    0 15px 40px
-    rgba(0, 0, 0, 0.15);
+    0 15px 40px rgba(0, 0, 0, 0.18);
+
+  overflow: hidden;
+}
+
+
+/* Subtle top highlight */
+
+.settings-panel::before {
+  content: "";
+
+  position: absolute;
+
+  top: 0;
+  left: 0;
+
+  width: 100%;
+  height: 2px;
+
+  background:
+    linear-gradient(
+      90deg,
+      #2865e5,
+      #1765dd,
+      transparent
+    );
+
+  opacity: 0.75;
 }
 
 
 /* =========================================================
-   SECTION
+   PANEL HEADER
    ========================================================= */
 
-.settings-section {
-  width: 100%;
-}
-
-
-.section-heading {
+.settings-panel-header {
   display: flex;
 
   align-items: center;
 
   gap: 13px;
+
+  margin-bottom: 25px;
 }
 
 
-.section-heading-icon {
-  width: 43px;
-  height: 43px;
+.settings-panel-icon {
+  width: 44px;
+  height: 44px;
 
   display: flex;
 
@@ -448,15 +373,20 @@
 
   border-radius: 9px;
 
-  background: rgba(33, 93, 213, 0.18);
+  background:
+    rgba(33, 93, 213, 0.15);
 
-  color: #4389ff;
+  border:
+    1px solid
+    rgba(66, 132, 237, 0.12);
+
+  color: #4b91ff;
 
   font-size: 19px;
 }
 
 
-.section-heading h2 {
+.settings-panel-header h2 {
   margin: 0;
 
   color: #f0f4fb;
@@ -467,138 +397,239 @@
 }
 
 
-.section-heading p {
+.settings-panel-header p {
   margin: 4px 0 0;
 
-  color: #8798b1;
+  color: #8192ab;
 
   font-size: 9px;
-}
 
-
-.settings-divider {
-  height: 1px;
-
-  margin: 22px 0;
-
-  background:
-    rgba(76, 108, 149, 0.22);
+  line-height: 1.5;
 }
 
 
 /* =========================================================
-   FORM GRID
+   FORM
    ========================================================= */
 
-.settings-form-grid {
-  display: grid;
+.settings-form {
+  width: 100%;
 
-  grid-template-columns:
-    repeat(2, minmax(0, 1fr));
+  display: flex;
+
+  flex-direction: column;
 
   gap: 18px;
 }
 
 
-.form-group {
+/* =========================================================
+   SETTINGS FIELD
+   ========================================================= */
+
+.settings-field {
+  width: 100%;
+
   display: flex;
 
   flex-direction: column;
+
+  gap: 7px;
 }
 
 
-.form-group label {
-  min-height: 18px;
-
-  margin-bottom: 7px;
-
+.settings-field label {
   display: flex;
 
   align-items: center;
 
   gap: 5px;
 
-  color: #c8d3e2;
+  color: #c9d4e4;
 
-  font-size: 9px;
+  font-size: 10px;
 
   font-weight: 500;
+
+  line-height: 1.4;
 }
 
 
-.form-group label svg {
-  width: 11px;
-  height: 11px;
+/* =========================================================
+   INPUT WRAPPER
+   ========================================================= */
 
-  color: #609aff;
-}
+.settings-input-wrapper {
+  position: relative;
 
-
-.form-group input,
-.form-group select {
   width: 100%;
 
-  height: 42px;
+  display: flex;
 
-  padding: 0 12px;
+  align-items: center;
+}
 
-  border: 1px solid rgba(78, 111, 151, 0.45);
 
-  border-radius: 7px;
+/* Left icon */
 
-  background: #081d3f;
+.settings-input-wrapper > svg {
+  position: absolute;
 
-  color: #dce4ef;
+  left: 13px;
+
+  width: 14px;
+  height: 14px;
+
+  color: #6688b5;
+
+  pointer-events: none;
+
+  z-index: 2;
+}
+
+
+/* =========================================================
+   INPUTS
+   ========================================================= */
+
+.settings-input-wrapper input {
+  width: 100%;
+
+  height: 43px;
+
+  padding:
+    0 42px
+    0 38px;
+
+  border:
+    1px solid
+    rgba(78, 111, 151, 0.45);
+
+  border-radius: 8px;
+
+  outline: none;
+
+  background:
+    rgba(4, 18, 42, 0.78);
+
+  color: #e1e9f4;
 
   font-family: inherit;
 
   font-size: 10px;
 
-  outline: none;
-
-  transition: 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 
-.form-group input:focus,
-.form-group select:focus {
+.settings-input-wrapper input::placeholder {
+  color: #627795;
+}
+
+
+.settings-input-wrapper input:hover {
+  border-color:
+    rgba(93, 133, 181, 0.62);
+
+  background:
+    rgba(5, 21, 47, 0.9);
+}
+
+
+.settings-input-wrapper input:focus {
   border-color: #317df2;
 
+  background:
+    rgba(6, 25, 55, 0.95);
+
   box-shadow:
-    0 0 0 2px
-    rgba(49, 125, 242, 0.08);
+    0 0 0 3px
+    rgba(49, 125, 242, 0.10);
 }
 
 
-.form-group input::placeholder {
-  color: #667b98;
-}
+/* Disabled account information fields */
 
+.settings-input-wrapper input:disabled {
+  opacity: 1;
 
-.form-group select option {
-  background: #081d3f;
+  cursor: not-allowed;
 
-  color: #ffffff;
+  color: #9caec5;
+
+  background:
+    rgba(4, 18, 42, 0.48);
+
+  border-color:
+    rgba(66, 94, 130, 0.32);
 }
 
 
 /* =========================================================
-   TOGGLE LIST
+   PASSWORD TOGGLE
    ========================================================= */
 
-.toggle-list {
+.password-toggle {
+  position: absolute;
+
+  right: 8px;
+
+  width: 31px;
+  height: 31px;
+
   display: flex;
 
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 
-  gap: 0;
+  border: none;
+
+  border-radius: 6px;
+
+  background: transparent;
+
+  color: #7187a5;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
 }
 
 
-.toggle-item {
-  min-height: 74px;
+.password-toggle:hover {
+  background:
+    rgba(55, 107, 188, 0.14);
 
-  padding: 14px 3px;
+  color: #80aeff;
+}
+
+
+.password-toggle:focus-visible {
+  outline:
+    2px solid
+    rgba(49, 125, 242, 0.6);
+
+  outline-offset: 1px;
+}
+
+
+.password-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+
+
+/* =========================================================
+   PASSWORD STRENGTH
+   ========================================================= */
+
+.password-strength {
+  margin-top: 7px;
 
   display: flex;
 
@@ -606,354 +637,49 @@
 
   justify-content: space-between;
 
-  gap: 20px;
+  gap: 10px;
 
-  border-bottom:
-    1px solid
-    rgba(76, 108, 149, 0.18);
+  font-size: 9px;
 }
 
 
-.toggle-item:last-child {
-  border-bottom: none;
+.password-strength span {
+  color: #8192ab;
 }
 
 
-.toggle-item > div {
-  display: flex;
-
-  flex-direction: column;
-
-  gap: 5px;
-}
-
-
-.toggle-item strong {
-  color: #e3eaf4;
-
-  font-size: 10px;
-
-  font-weight: 600;
-}
-
-
-.toggle-item span:not(.slider) {
-  color: #8495ad;
-
-  font-size: 8px;
-
-  line-height: 1.5;
-}
-
-
-/* =========================================================
-   TOGGLE SWITCH
-   ========================================================= */
-
-.switch {
-  position: relative;
-
-  width: 42px;
-  height: 23px;
-
-  flex-shrink: 0;
-}
-
-
-.switch input {
-  width: 0;
-  height: 0;
-
-  opacity: 0;
-}
-
-
-.slider {
-  position: absolute;
-
-  inset: 0;
-
-  border-radius: 30px;
-
-  background: #263d5d;
-
-  cursor: pointer;
-
-  transition: 0.2s ease;
-}
-
-
-.slider::before {
-  content: "";
-
-  position: absolute;
-
-  width: 17px;
-  height: 17px;
-
-  left: 3px;
-  top: 3px;
-
-  border-radius: 50%;
-
-  background: #d8e2ef;
-
-  transition: 0.2s ease;
-}
-
-
-.switch input:checked + .slider {
-  background: #1765dd;
-}
-
-
-.switch input:checked + .slider::before {
-  transform: translateX(19px);
-
-  background: #ffffff;
-}
-
-
-/* =========================================================
-   SECURITY NOTE
-   ========================================================= */
-
-.security-note {
-  margin-top: 20px;
-
-  padding: 15px;
-
-  display: flex;
-
-  align-items: flex-start;
-
-  gap: 12px;
-
-  border: 1px solid rgba(51, 123, 231, 0.25);
-
-  border-radius: 8px;
-
-  background: rgba(28, 85, 175, 0.1);
-
-  color: #75a9ff;
-}
-
-
-.security-note > svg {
-  margin-top: 2px;
-
-  flex-shrink: 0;
-}
-
-
-.security-note strong {
-  color: #dbe8fb;
-
-  font-size: 10px;
-}
-
-
-.security-note p {
-  margin: 5px 0 0;
-
-  color: #8295b0;
-
-  font-size: 8px;
-
-  line-height: 1.6;
-}
-
-
-/* =========================================================
-   DATABASE
-   ========================================================= */
-
-.database-status {
-  min-height: 75px;
-
-  padding: 15px;
-
-  display: flex;
-
-  align-items: center;
-
-  gap: 13px;
-
-  border: 1px solid rgba(16, 189, 104, 0.25);
-
-  border-radius: 9px;
-
-  background: rgba(16, 189, 104, 0.06);
-}
-
-
-.database-status-icon {
-  width: 42px;
-  height: 42px;
-
-  display: flex;
-
-  align-items: center;
-  justify-content: center;
-
-  border-radius: 8px;
-
-  background: rgba(16, 189, 104, 0.15);
-
-  color: #35d984;
-
-  font-size: 19px;
-}
-
-
-.database-status > div:nth-child(2) {
-  flex: 1;
-
-  display: flex;
-
-  flex-direction: column;
-
-  gap: 5px;
-}
-
-
-.database-status strong {
-  color: #e3eaf4;
-
-  font-size: 11px;
-}
-
-
-.database-status span {
-  color: #8495ad;
-
-  font-size: 8px;
-}
-
-
-.connection-status {
-  display: flex;
-
-  align-items: center;
-
-  gap: 6px;
-
-  color: #38d985;
-
+.password-strength strong {
   font-size: 9px;
 
   font-weight: 600;
 }
 
 
-.connection-status span {
-  width: 7px;
-  height: 7px;
+.strength-weak {
+  color: #ff7777;
+}
 
-  border-radius: 50%;
 
-  background: #22d37c;
+.strength-medium {
+  color: #f3bd45;
+}
 
-  box-shadow:
-    0 0 8px
-    rgba(34, 211, 124, 0.7);
+
+.strength-strong {
+  color: #45db8b;
 }
 
 
 /* =========================================================
-   DATABASE INFO
+   FIELD HELP
    ========================================================= */
 
-.database-info-grid {
-  display: grid;
+.field-help {
+  display: block;
 
-  grid-template-columns:
-    repeat(2, minmax(0, 1fr));
-
-  gap: 10px;
-
-  margin-top: 18px;
-}
-
-
-.database-info-card {
-  min-height: 75px;
-
-  padding: 14px;
-
-  display: flex;
-
-  flex-direction: column;
-
-  justify-content: center;
-
-  gap: 6px;
-
-  border: 1px solid rgba(76, 108, 149, 0.25);
-
-  border-radius: 8px;
-
-  background: rgba(4, 19, 44, 0.5);
-}
-
-
-.database-info-card span {
-  color: #7f91aa;
-
-  font-size: 8px;
-}
-
-
-.database-info-card strong {
-  color: #dce5f2;
-
-  font-size: 10px;
-}
-
-
-/* =========================================================
-   DATABASE WARNING
-   ========================================================= */
-
-.database-warning {
-  margin-top: 18px;
-
-  padding: 15px;
-
-  display: flex;
-
-  align-items: flex-start;
-
-  gap: 12px;
-
-  border: 1px solid rgba(243, 189, 25, 0.25);
-
-  border-radius: 8px;
-
-  background: rgba(243, 189, 25, 0.06);
-
-  color: #f3bd19;
-}
-
-
-.database-warning > svg {
   margin-top: 2px;
 
-  flex-shrink: 0;
-}
-
-
-.database-warning strong {
-  color: #eee7d2;
-
-  font-size: 10px;
-}
-
-
-.database-warning p {
-  margin: 5px 0 0;
-
-  color: #9e987f;
+  color: #6f829f;
 
   font-size: 8px;
 
@@ -962,7 +688,237 @@
 
 
 /* =========================================================
-   RESPONSIVE
+   PASSWORD MATCH
+   ========================================================= */
+
+.password-match,
+.password-not-match {
+  margin-top: 6px;
+
+  font-size: 9px;
+
+  font-weight: 500;
+}
+
+
+.password-match {
+  color: #4ddd91;
+}
+
+
+.password-not-match {
+  color: #ff7777;
+}
+
+
+/* =========================================================
+   CHANGE PASSWORD BUTTON
+   ========================================================= */
+
+.save-password-button {
+  width: 100%;
+
+  min-height: 44px;
+
+  margin-top: 3px;
+
+  padding: 0 18px;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  gap: 8px;
+
+  border: none;
+
+  border-radius: 8px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #1d5de0,
+      #124dc5
+    );
+
+  color: #ffffff;
+
+  font-family: inherit;
+
+  font-size: 10px;
+
+  font-weight: 600;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 7px 20px
+    rgba(17, 78, 190, 0.20);
+
+  transition:
+    transform 0.2s ease,
+    filter 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+
+.save-password-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+
+.save-password-button:hover:not(:disabled) {
+  filter: brightness(1.1);
+
+  transform: translateY(-1px);
+
+  box-shadow:
+    0 10px 24px
+    rgba(17, 78, 190, 0.28);
+}
+
+
+.save-password-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+
+.save-password-button:disabled {
+  opacity: 0.6;
+
+  cursor: not-allowed;
+
+  box-shadow: none;
+}
+
+
+/* =========================================================
+   BUTTON SPINNER
+   ========================================================= */
+
+.button-spinner {
+  width: 14px;
+  height: 14px;
+
+  border:
+    2px solid
+    rgba(255, 255, 255, 0.35);
+
+  border-top-color: #ffffff;
+
+  border-radius: 50%;
+
+  animation:
+    settingsSpin 0.8s linear infinite;
+}
+
+
+@keyframes settingsSpin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+/* =========================================================
+   SECURITY INFORMATION
+   ========================================================= */
+
+.security-information {
+  margin-top: 20px;
+
+  padding: 17px 18px;
+
+  display: flex;
+
+  align-items: flex-start;
+
+  gap: 13px;
+
+  border:
+    1px solid
+    rgba(51, 123, 231, 0.25);
+
+  border-radius: 10px;
+
+  background:
+    linear-gradient(
+      135deg,
+      rgba(28, 85, 175, 0.11),
+      rgba(28, 85, 175, 0.045)
+    );
+
+  box-shadow:
+    0 8px 25px rgba(0, 0, 0, 0.08);
+}
+
+
+.security-icon {
+  width: 38px;
+  height: 38px;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+
+  border-radius: 8px;
+
+  background:
+    rgba(48, 112, 214, 0.14);
+
+  color: #63a0ff;
+
+  font-size: 17px;
+}
+
+
+.security-information h3 {
+  margin: 1px 0 0;
+
+  color: #dbe8fb;
+
+  font-size: 11px;
+
+  font-weight: 600;
+}
+
+
+.security-information p {
+  margin: 5px 0 0;
+
+  color: #8295b0;
+
+  font-size: 8px;
+
+  line-height: 1.7;
+}
+
+
+/* =========================================================
+   ACCESSIBILITY
+   ========================================================= */
+
+.settings-input-wrapper input:focus-visible,
+.save-password-button:focus-visible {
+  outline:
+    2px solid
+    rgba(49, 125, 242, 0.65);
+
+  outline-offset: 2px;
+}
+
+
+/* =========================================================
+   RESPONSIVE - 1100px
    ========================================================= */
 
 @media (max-width: 1100px) {
@@ -974,54 +930,48 @@
   }
 
   .settings-content {
-    padding: 25px;
+    padding: 27px 25px 45px;
   }
 
-  .settings-layout {
-    grid-template-columns: 210px minmax(0, 1fr);
+  .settings-grid {
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(0, 1fr);
+
+    gap: 16px;
   }
 
+  .settings-panel {
+    padding: 22px;
+  }
 }
 
 
-@media (max-width: 850px) {
+/* =========================================================
+   RESPONSIVE - 900px
+   ========================================================= */
 
-  .settings-header {
-    flex-direction: column;
+@media (max-width: 900px) {
 
-    align-items: flex-start;
-  }
-
-  .settings-header-actions {
-    width: 100%;
-  }
-
-  .reset-button,
-  .save-button {
-    flex: 1;
-  }
-
-  .settings-layout {
+  .settings-grid {
     grid-template-columns: 1fr;
   }
 
-  .settings-navigation {
-    display: grid;
-
-    grid-template-columns:
-      repeat(2, 1fr);
-
-    gap: 5px;
+  .settings-panel {
+    width: 100%;
   }
 
-  .settings-nav-item {
-    min-height: 58px;
+  .security-information {
+    margin-top: 16px;
   }
-
 }
 
 
-@media (max-width: 650px) {
+/* =========================================================
+   RESPONSIVE - 700px
+   ========================================================= */
+
+@media (max-width: 700px) {
 
   .settings-main {
     margin-left: 75px;
@@ -1030,53 +980,206 @@
   }
 
   .settings-content {
-    padding: 20px 15px;
+    padding: 22px 18px 40px;
+  }
+
+  .settings-header {
+    margin-bottom: 20px;
+  }
+
+  .settings-title {
+    gap: 12px;
+  }
+
+  .settings-title-icon {
+    width: 50px;
+    height: 50px;
+
+    font-size: 22px;
   }
 
   .settings-title h1 {
     font-size: 25px;
   }
 
-  .settings-form-grid {
-    grid-template-columns: 1fr;
+  .settings-title p {
+    font-size: 10px;
   }
 
-  .database-info-grid {
-    grid-template-columns: 1fr;
+  .settings-panel {
+    padding: 20px;
   }
 
-  .settings-navigation {
-    grid-template-columns: 1fr;
+  .settings-panel-header {
+    margin-bottom: 20px;
   }
-
-  .database-status {
-    align-items: flex-start;
-
-    flex-wrap: wrap;
-  }
-
-  .connection-status {
-    width: 100%;
-
-    margin-left: 55px;
-  }
-
 }
 
 
-@media (max-width: 450px) {
+/* =========================================================
+   RESPONSIVE - 500px
+   ========================================================= */
 
-  .settings-header-actions {
-    flex-direction: column;
+@media (max-width: 500px) {
+
+  .settings-main {
+    margin-left: 70px;
+
+    width: calc(100% - 70px);
   }
 
-  .reset-button,
-  .save-button {
-    width: 100%;
+  .settings-content {
+    padding: 18px 13px 35px;
   }
 
-  .settings-card {
-    padding: 18px;
+  .settings-title-icon {
+    width: 46px;
+    height: 46px;
+
+    border-radius: 9px;
+
+    font-size: 20px;
   }
 
+  .settings-title h1 {
+    font-size: 22px;
+  }
+
+  .settings-title p {
+    font-size: 9px;
+  }
+
+  .settings-panel {
+    padding: 17px;
+
+    border-radius: 10px;
+  }
+
+  .settings-panel-header {
+    gap: 10px;
+  }
+
+  .settings-panel-icon {
+    width: 39px;
+    height: 39px;
+
+    font-size: 17px;
+  }
+
+  .settings-panel-header h2 {
+    font-size: 14px;
+  }
+
+  .settings-panel-header p {
+    font-size: 8px;
+  }
+
+  .settings-input-wrapper input {
+    height: 42px;
+
+    font-size: 9px;
+  }
+
+  .settings-field label {
+    font-size: 9px;
+  }
+
+  .save-password-button {
+    min-height: 43px;
+
+    font-size: 9px;
+  }
+
+  .security-information {
+    padding: 14px;
+
+    gap: 10px;
+  }
+
+  .security-icon {
+    width: 34px;
+    height: 34px;
+
+    font-size: 15px;
+  }
 }
+
+
+/* =========================================================
+   RESPONSIVE - 400px
+   ========================================================= */
+
+@media (max-width: 400px) {
+
+  .settings-main {
+    margin-left: 65px;
+
+    width: calc(100% - 65px);
+  }
+
+  .settings-content {
+    padding: 16px 10px 30px;
+  }
+
+  .settings-title {
+    gap: 9px;
+  }
+
+  .settings-title-icon {
+    width: 42px;
+    height: 42px;
+
+    font-size: 18px;
+  }
+
+  .settings-title h1 {
+    font-size: 20px;
+  }
+
+  .settings-title p {
+    font-size: 8px;
+  }
+
+  .settings-panel {
+    padding: 15px;
+  }
+
+  .settings-form {
+    gap: 15px;
+  }
+
+  .settings-success,
+  .settings-error {
+    font-size: 9px;
+
+    padding: 10px 12px;
+  }
+
+  .security-information p {
+    font-size: 7.5px;
+  }
+}
+
+
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+
+  .settings-success,
+  .settings-error {
+    animation: none;
+  }
+
+  .save-password-button,
+  .settings-input-wrapper input,
+  .password-toggle {
+    transition: none;
+  }
+
+  .button-spinner {
+    animation: none;
+  }
+}
+

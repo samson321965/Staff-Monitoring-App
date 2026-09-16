@@ -7,6 +7,8 @@ import {
   FaLock
 } from "react-icons/fa";
 
+import { buildApiUrl } from "../config/api";
+
 function Login() {
 
   const navigate = useNavigate();
@@ -16,7 +18,6 @@ function Login() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
 
   const handleLogin = async (e) => {
 
@@ -28,21 +29,18 @@ function Login() {
 
     try {
 
-      const response = await fetch(
-        "https://staff-monitoring-app-web-service.onrender.com/api/auth/login",
-        {
-          method: "POST",
+      const response = await fetch(buildApiUrl("/auth/login"), {
+        method: "POST",
 
-          headers: {
-            "Content-Type": "application/json"
-          },
+        headers: {
+          "Content-Type": "application/json"
+        },
 
-          body: JSON.stringify({
-            email,
-            password
-          })
-        }
-      );
+        body: JSON.stringify({
+          email,
+          password
+        })
+      });
 
 
       const data = await response.json();

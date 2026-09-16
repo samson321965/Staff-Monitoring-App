@@ -19,9 +19,11 @@ import Sidebar from "../components/Sidebar";
 import logo from "../assets/images/logo.png";
 
 import "../styles/Reports.css";
+import { buildApiUrl } from "../config/api";
+import { getAuthHeaders } from "../utils/auth";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+const API_URL = buildApiUrl();
 
 const Reports = () => {
   /* =====================================================
@@ -70,6 +72,12 @@ const Reports = () => {
       setLoading(true);
       setError("");
 
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        throw new Error("Your login session has expired. Please log in again.");
+      }
+
       const query = new URLSearchParams({
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,
@@ -78,11 +86,27 @@ const Reports = () => {
       });
 
       const response = await fetch(
-        `${API_URL}/reports/summary?${query.toString()}`
+        `${API_URL}/reports/summary?${query.toString()}`,
+        {
+          method: "GET",
+          headers: getAuthHeaders(),
+        }
       );
 
+  
+
       if (!response.ok) {
-        throw new Error("Unable to load report data.");
+        const errorData = await response.json().catch(() => ({}));
+
+        if (response.status === 401) {
+          throw new Error(errorData.message || "Your session is invalid. Please log in again.");
+        }
+
+        if (response.status === 403) {
+          throw new Error(errorData.message || "You do not have permission to view reports.");
+        }
+
+        throw new Error(errorData.message || "Unable to load report data.");
       }
 
       const data = await response.json();
@@ -113,7 +137,7 @@ const Reports = () => {
       console.error("Reports error:", err);
 
       setError(
-        "Unable to connect to the Reports API. Please check your backend server."
+        err.message || "Unable to connect to the Reports API. Please check your backend server."
       );
     } finally {
       setLoading(false);
@@ -172,7 +196,11 @@ const Reports = () => {
   const downloadReport = async (report) => {
     try {
       const response = await fetch(
-        `${API_URL}/reports/${report.id}/download`
+        `${API_URL}/reports/${report.id}/download`,
+        {
+          method: "GET",
+          headers: getAuthHeaders(),
+        }
       );
 
       if (!response.ok) {
@@ -214,6 +242,7 @@ const Reports = () => {
         method: "POST",
 
         headers: {
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
 

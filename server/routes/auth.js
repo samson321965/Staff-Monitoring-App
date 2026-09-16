@@ -1,88 +1,20 @@
-cdconst express = require("express");
+const express = require("express");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
 const pool = require("../config/database");
+const { authenticateToken } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
+const getJwtSecret = () => {
+    const secret = process.env.JWT_SECRET;
 
-// ==========================================
-// JWT AUTHENTICATION MIDDLEWARE
-// ==========================================
-
-const authenticateToken = (req, res, next) => {
-    try {
-
-        // Get Authorization header
-
-        const authHeader = req.headers.authorization;
-
-        // Check if token exists
-
-        if (!authHeader) {
-            return res.status(401).json({
-                message: "Access token is required",
-            });
-        }
-
-        // Expected format:
-        // Authorization: Bearer TOKEN
-
-        const parts = authHeader.split(" ");
-
-        if (
-            parts.length !== 2 ||
-            parts[0] !== "Bearer"
-        ) {
-            return res.status(401).json({
-                message: "Invalid authorization format",
-            });
-        }
-
-        const token = parts[1];
-
-        // Verify JWT
-
-        jwt.verify(
-            token,
-            process.env.JWT_SECRET ||
-                "staff_monitor_secret",
-            (error, user) => {
-
-                if (error) {
-
-                    console.error(
-                        "JWT verification error:",
-                        error.message
-                    );
-
-                    return res.status(403).json({
-                        message:
-                            "Invalid or expired token",
-                    });
-                }
-
-                // Store decoded JWT information
-
-                req.user = user;
-
-                next();
-            }
-        );
-
-    } catch (error) {
-
-        console.error(
-            "Authentication error:",
-            error
-        );
-
-        return res.status(500).json({
-            message:
-                "Server error during authentication",
-        });
+    if (!secret) {
+        throw new Error("JWT_SECRET is not configured. Check server/.env");
     }
+
+    return secret;
 };
 
 
@@ -253,8 +185,7 @@ router.post("/login", async (req, res) => {
 
             },
 
-            process.env.JWT_SECRET ||
-                "staff_monitor_secret",
+            getJwtSecret(),
 
             {
 
