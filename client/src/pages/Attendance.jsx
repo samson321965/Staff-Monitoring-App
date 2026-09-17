@@ -41,8 +41,7 @@ const Attendance = () => {
      MARK ATTENDANCE FORM
   ===================================================== */
 
-  const [showAttendanceForm, setShowAttendanceForm] =
-    useState(false);
+  const [showAttendanceForm, setShowAttendanceForm] = useState(false);
 
   const [employees, setEmployees] = useState([]);
 
@@ -104,46 +103,46 @@ const Attendance = () => {
      FETCH EMPLOYEES FOR FORM
   ===================================================== */
 
-const fetchEmployees = () => {
-  try {
-    const headers = getAuthHeaders();
+  const fetchEmployees = () => {
+    try {
+      const headers = getAuthHeaders();
 
-    fetch(buildApiUrl("/employees"), {
-      method: "GET",
-      headers,
-    })
-    .then(async (response) => {
-      const data = await response.json().catch(() => ({}));
+      fetch(buildApiUrl("/employees"), {
+        method: "GET",
+        headers,
+      })
+        .then(async (response) => {
+          const data = await response.json().catch(() => ({}));
 
-      console.log("Employee API status:", response.status);
-      console.log("Employee API response:", data);
+          console.log("Employee API status:", response.status);
+          console.log("Employee API response:", data);
 
-      if (!response.ok) {
-        throw new Error(
-          data.message || "Failed to fetch employees"
-        );
-      }
+          if (!response.ok) {
+            throw new Error(
+              data.message || "Failed to fetch employees"
+            );
+          }
 
-      return data;
-    })
-    .then((data) => {
-      console.log("Employees from API:", data);
+          return data;
+        })
+        .then((data) => {
+          console.log("Employees from API:", data);
 
-      setEmployees(data);
-    })
-    .catch((error) => {
-      console.error("Employee fetch error:", error);
+          setEmployees(data);
+        })
+        .catch((error) => {
+          console.error("Employee fetch error:", error);
 
-      setFormError(
-        error.message ||
-          "Unable to load employees. Please check the employee API."
-      );
-    });
-  } catch (error) {
-    console.error("Authentication token not found.", error);
-    setFormError("Please login again. Authentication token is missing.");
-  }
-};
+          setFormError(
+            error.message ||
+              "Unable to load employees. Please check the employee API."
+          );
+        });
+    } catch (error) {
+      console.error("Authentication token not found.", error);
+      setFormError("Please login again. Authentication token is missing.");
+    }
+  };
 
   /* =====================================================
      LOAD DATA WHEN PAGE OPENS
@@ -185,15 +184,9 @@ const fetchEmployees = () => {
   const getLocalDateString = (date) => {
     const year = date.getFullYear();
 
-    const month = String(date.getMonth() + 1).padStart(
-      2,
-      "0"
-    );
+    const month = String(date.getMonth() + 1).padStart(2, "0");
 
-    const day = String(date.getDate()).padStart(
-      2,
-      "0"
-    );
+    const day = String(date.getDate()).padStart(2, "0");
 
     return `${year}-${month}-${day}`;
   };
@@ -227,8 +220,7 @@ const fetchEmployees = () => {
   ===================================================== */
 
   const matchesDateFilter = (dateValue) => {
-    const attendanceDate =
-      getAttendanceDate(dateValue);
+    const attendanceDate = getAttendanceDate(dateValue);
 
     if (!attendanceDate) {
       return false;
@@ -236,8 +228,7 @@ const fetchEmployees = () => {
 
     const today = new Date();
 
-    const todayString =
-      getLocalDateString(today);
+    const todayString = getLocalDateString(today);
 
     /* TODAY */
 
@@ -250,12 +241,9 @@ const fetchEmployees = () => {
     if (dateFilter === "Yesterday") {
       const yesterday = new Date(today);
 
-      yesterday.setDate(
-        yesterday.getDate() - 1
-      );
+      yesterday.setDate(yesterday.getDate() - 1);
 
-      const yesterdayString =
-        getLocalDateString(yesterday);
+      const yesterdayString = getLocalDateString(yesterday);
 
       return attendanceDate === yesterdayString;
     }
@@ -267,62 +255,37 @@ const fetchEmployees = () => {
 
       const day = currentDate.getDay();
 
-      const difference =
-        day === 0 ? 6 : day - 1;
+      const difference = day === 0 ? 6 : day - 1;
 
-      const weekStart =
-        new Date(currentDate);
+      const weekStart = new Date(currentDate);
 
-      weekStart.setDate(
-        currentDate.getDate() - difference
-      );
+      weekStart.setDate(currentDate.getDate() - difference);
 
       weekStart.setHours(0, 0, 0, 0);
 
-      const weekEnd =
-        new Date(weekStart);
+      const weekEnd = new Date(weekStart);
 
-      weekEnd.setDate(
-        weekStart.getDate() + 6
-      );
+      weekEnd.setDate(weekStart.getDate() + 6);
 
-      weekEnd.setHours(
-        23,
-        59,
-        59,
-        999
-      );
+      weekEnd.setHours(23, 59, 59, 999);
 
-      const recordDate =
-        new Date(
-          `${attendanceDate}T00:00:00`
-        );
+      const recordDate = new Date(`${attendanceDate}T00:00:00`);
 
-      return (
-        recordDate >= weekStart &&
-        recordDate <= weekEnd
-      );
+      return recordDate >= weekStart && recordDate <= weekEnd;
     }
 
     /* THIS MONTH */
 
     if (dateFilter === "This Month") {
-      const currentYear =
-        today.getFullYear();
+      const currentYear = today.getFullYear();
 
-      const currentMonth =
-        today.getMonth();
+      const currentMonth = today.getMonth();
 
-      const recordDate =
-        new Date(
-          `${attendanceDate}T00:00:00`
-        );
+      const recordDate = new Date(`${attendanceDate}T00:00:00`);
 
       return (
-        recordDate.getFullYear() ===
-          currentYear &&
-        recordDate.getMonth() ===
-          currentMonth
+        recordDate.getFullYear() === currentYear &&
+        recordDate.getMonth() === currentMonth
       );
     }
 
@@ -333,44 +296,32 @@ const fetchEmployees = () => {
      CALCULATE WORKING HOURS
   ===================================================== */
 
-  const calculateHours = (
-    checkIn,
-    checkOut
-  ) => {
+  const calculateHours = (checkIn, checkOut) => {
     if (!checkIn || !checkOut) {
       return "-";
     }
 
-    const [inHours, inMinutes] =
-      String(checkIn)
-        .split(":")
-        .map(Number);
+    const [inHours, inMinutes] = String(checkIn)
+      .split(":")
+      .map(Number);
 
-    const [outHours, outMinutes] =
-      String(checkOut)
-        .split(":")
-        .map(Number);
+    const [outHours, outMinutes] = String(checkOut)
+      .split(":")
+      .map(Number);
 
-    const startMinutes =
-      inHours * 60 + inMinutes;
+    const startMinutes = inHours * 60 + inMinutes;
 
-    const endMinutes =
-      outHours * 60 + outMinutes;
+    const endMinutes = outHours * 60 + outMinutes;
 
-    const difference =
-      endMinutes - startMinutes;
+    const difference = endMinutes - startMinutes;
 
     if (difference <= 0) {
       return "-";
     }
 
-    const hours =
-      Math.floor(
-        difference / 60
-      );
+    const hours = Math.floor(difference / 60);
 
-    const minutes =
-      difference % 60;
+    const minutes = difference % 60;
 
     return `${hours}h ${minutes}m`;
   };
@@ -379,100 +330,70 @@ const fetchEmployees = () => {
      FILTER ATTENDANCE DATA
   ===================================================== */
 
-  const filteredData =
-    attendanceData.filter((item) => {
-      const dateMatch =
-        matchesDateFilter(item.date);
+  const filteredData = attendanceData.filter((item) => {
+    const dateMatch = matchesDateFilter(item.date);
 
-      const search =
-        searchTerm
-          .toLowerCase()
-          .trim();
+    const search = searchTerm.toLowerCase().trim();
 
-      const employeeName =
-        item.employee
-          ? String(
-              item.employee
-            ).toLowerCase()
-          : "";
+    const employeeName = item.employee
+      ? String(item.employee).toLowerCase()
+      : "";
 
-      const employeeId =
-        item.employeeId
-          ? String(
-              item.employeeId
-            ).toLowerCase()
-          : "";
+    const employeeId = item.employeeId
+      ? String(item.employeeId).toLowerCase()
+      : "";
 
-      const searchMatch =
-        employeeName.includes(search) ||
-        employeeId.includes(search);
+    const searchMatch =
+      employeeName.includes(search) ||
+      employeeId.includes(search);
 
-      const departmentMatch =
-        department === "All Departments" ||
-        item.department === department;
+    const departmentMatch =
+      department === "All Departments" ||
+      item.department === department;
 
-      const statusMatch =
-        status === "All Status" ||
-        item.status === status;
+    const statusMatch =
+      status === "All Status" ||
+      item.status === status;
 
-      return (
-        dateMatch &&
-        searchMatch &&
-        departmentMatch &&
-        statusMatch
-      );
-    });
+    return (
+      dateMatch &&
+      searchMatch &&
+      departmentMatch &&
+      statusMatch
+    );
+  });
 
   /* =====================================================
      STATISTICS
   ===================================================== */
 
-  const uniqueEmployees =
-    new Set(
-      filteredData.map(
-        (item) => item.employeeId
-      )
-    );
+  const uniqueEmployees = new Set(
+    filteredData.map((item) => item.employeeId)
+  );
 
-  const totalEmployees =
-    uniqueEmployees.size;
+  const totalEmployees = uniqueEmployees.size;
 
-  const present =
-    filteredData.filter(
-      (item) =>
-        item.status === "Present"
-    ).length;
+  const present = filteredData.filter(
+    (item) => item.status === "Present"
+  ).length;
 
-  const late =
-    filteredData.filter(
-      (item) =>
-        item.status === "Late"
-    ).length;
+  const late = filteredData.filter(
+    (item) => item.status === "Late"
+  ).length;
 
-  const absent =
-    filteredData.filter(
-      (item) =>
-        item.status === "Absent"
-    ).length;
+  const absent = filteredData.filter(
+    (item) => item.status === "Absent"
+  ).length;
 
-  const halfDay =
-    filteredData.filter(
-      (item) =>
-        item.status === "Half Day"
-    ).length;
+  const halfDay = filteredData.filter(
+    (item) => item.status === "Half Day"
+  ).length;
 
-  const attended =
-    present +
-    late +
-    halfDay;
+  const attended = present + late + halfDay;
 
   const attendanceRate =
     totalEmployees > 0
-      ? Math.round(
-          (attended /
-            totalEmployees) *
-            100
-        )
+      ? Math.round((attended / totalEmployees) * 100)
       : 0;
 
   /* =====================================================
@@ -505,8 +426,7 @@ const fetchEmployees = () => {
 
     setFormData({
       employee_id: "",
-      attendance_date:
-        getLocalDateString(new Date()),
+      attendance_date: getLocalDateString(new Date()),
       check_in: "",
       check_out: "",
       status: "Present",
@@ -535,10 +455,7 @@ const fetchEmployees = () => {
   ===================================================== */
 
   const handleFormChange = (event) => {
-    const {
-      name,
-      value,
-    } = event.target;
+    const { name, value } = event.target;
 
     setFormData((previous) => ({
       ...previous,
@@ -550,9 +467,7 @@ const fetchEmployees = () => {
      SUBMIT ATTENDANCE
   ===================================================== */
 
-  const handleSubmitAttendance = async (
-    event
-  ) => {
+  const handleSubmitAttendance = async (event) => {
     event.preventDefault();
 
     setFormError("");
@@ -578,38 +493,37 @@ const fetchEmployees = () => {
           method: "POST",
 
           headers: {
-            "Content-Type":
-              "application/json",
+            ...getAuthHeaders(),
+            "Content-Type": "application/json",
           },
 
           body: JSON.stringify({
-            employee_id:
-              formData.employee_id,
+            employee_id: formData.employee_id,
 
-            attendance_date:
-              formData.attendance_date,
+            attendance_date: formData.attendance_date,
 
-            check_in:
-              formData.check_in ||
-              null,
+            check_in: formData.check_in || null,
 
-            check_out:
-              formData.check_out ||
-              null,
+            check_out: formData.check_out || null,
 
-            status:
-              formData.status ||
-              "Present",
+            status: formData.status || "Present",
 
-            notes:
-              formData.notes ||
-              null,
+            notes: formData.notes || null,
           }),
         }
       );
 
-      const data =
-        await response.json();
+      const data = await response.json();
+
+      console.log(
+        "Create attendance API status:",
+        response.status
+      );
+
+      console.log(
+        "Create attendance API response:",
+        data
+      );
 
       if (!response.ok) {
         throw new Error(
@@ -624,8 +538,7 @@ const fetchEmployees = () => {
 
       setFormData({
         employee_id: "",
-        attendance_date:
-          getLocalDateString(new Date()),
+        attendance_date: getLocalDateString(new Date()),
         check_in: "",
         check_out: "",
         status: "Present",
@@ -638,7 +551,6 @@ const fetchEmployees = () => {
         setShowAttendanceForm(false);
         setFormSuccess("");
       }, 1000);
-
     } catch (error) {
       console.error(
         "Create attendance error:",
@@ -673,9 +585,7 @@ const fetchEmployees = () => {
 
         <div className="attendance-content">
 
-          {/* =================================================
-              PAGE HEADER
-          ================================================= */}
+          {/* PAGE HEADER */}
 
           <div className="attendance-header">
 
@@ -702,14 +612,10 @@ const fetchEmployees = () => {
 
             <div className="attendance-header-actions">
 
-              {/* MARK ATTENDANCE */}
-
               <button
                 type="button"
                 className="add-attendance-btn"
-                onClick={
-                  openAttendanceForm
-                }
+                onClick={openAttendanceForm}
               >
                 <FaPlus />
 
@@ -718,14 +624,10 @@ const fetchEmployees = () => {
                 </span>
               </button>
 
-              {/* REFRESH */}
-
               <button
                 type="button"
                 className="refresh-attendance-btn"
-                onClick={
-                  handleRefresh
-                }
+                onClick={handleRefresh}
                 disabled={loading}
               >
                 <FaSyncAlt />
@@ -749,13 +651,9 @@ const fetchEmployees = () => {
             </div>
           )}
 
-          {/* =================================================
-              STATISTICS
-          ================================================= */}
+          {/* STATISTICS */}
 
           <div className="attendance-statistics">
-
-            {/* TOTAL */}
 
             <div className="attendance-stat-card total-attendance-card">
 
@@ -781,8 +679,6 @@ const fetchEmployees = () => {
 
             </div>
 
-            {/* PRESENT */}
-
             <div className="attendance-stat-card present-card">
 
               <div className="attendance-stat-icon">
@@ -806,8 +702,6 @@ const fetchEmployees = () => {
               </div>
 
             </div>
-
-            {/* LATE */}
 
             <div className="attendance-stat-card late-card">
 
@@ -833,8 +727,6 @@ const fetchEmployees = () => {
 
             </div>
 
-            {/* ABSENT */}
-
             <div className="attendance-stat-card absent-card">
 
               <div className="attendance-stat-icon">
@@ -858,8 +750,6 @@ const fetchEmployees = () => {
               </div>
 
             </div>
-
-            {/* RATE */}
 
             <div className="attendance-stat-card rate-card">
 
@@ -887,17 +777,13 @@ const fetchEmployees = () => {
 
           </div>
 
-          {/* =================================================
-              ATTENDANCE TABLE
-          ================================================= */}
+          {/* ATTENDANCE TABLE */}
 
           <div className="attendance-table-container">
 
             {/* FILTER BAR */}
 
             <div className="attendance-filters">
-
-              {/* DATE */}
 
               <div className="attendance-filter-select">
 
@@ -906,9 +792,7 @@ const fetchEmployees = () => {
                 <select
                   value={dateFilter}
                   onChange={(event) =>
-                    setDateFilter(
-                      event.target.value
-                    )
+                    setDateFilter(event.target.value)
                   }
                 >
 
@@ -934,16 +818,12 @@ const fetchEmployees = () => {
 
               </div>
 
-              {/* DEPARTMENT */}
-
               <div className="attendance-filter-select">
 
                 <select
                   value={department}
                   onChange={(event) =>
-                    setDepartment(
-                      event.target.value
-                    )
+                    setDepartment(event.target.value)
                   }
                 >
 
@@ -977,16 +857,12 @@ const fetchEmployees = () => {
 
               </div>
 
-              {/* STATUS */}
-
               <div className="attendance-filter-select">
 
                 <select
                   value={status}
                   onChange={(event) =>
-                    setStatus(
-                      event.target.value
-                    )
+                    setStatus(event.target.value)
                   }
                 >
 
@@ -1020,8 +896,6 @@ const fetchEmployees = () => {
 
               </div>
 
-              {/* SEARCH */}
-
               <div className="attendance-search">
 
                 <FaSearch />
@@ -1031,9 +905,7 @@ const fetchEmployees = () => {
                   placeholder="Search employee..."
                   value={searchTerm}
                   onChange={(event) =>
-                    setSearchTerm(
-                      event.target.value
-                    )
+                    setSearchTerm(event.target.value)
                   }
                 />
 
@@ -1103,12 +975,8 @@ const fetchEmployees = () => {
                         (employee) => (
 
                           <tr
-                            key={
-                              employee.id
-                            }
+                            key={employee.id}
                           >
-
-                            {/* EMPLOYEE */}
 
                             <td>
 
@@ -1117,9 +985,7 @@ const fetchEmployees = () => {
                                 <div className="attendance-employee-avatar">
 
                                   {employee.employee
-                                    ? employee.employee.charAt(
-                                        0
-                                      )
+                                    ? employee.employee.charAt(0)
                                     : "?"}
 
                                 </div>
@@ -1127,15 +993,11 @@ const fetchEmployees = () => {
                                 <div className="attendance-employee-details">
 
                                   <strong>
-                                    {
-                                      employee.employee
-                                    }
+                                    {employee.employee}
                                   </strong>
 
                                   <span>
-                                    {
-                                      employee.employeeId
-                                    }
+                                    {employee.employeeId}
                                   </span>
 
                                 </div>
@@ -1144,42 +1006,21 @@ const fetchEmployees = () => {
 
                             </td>
 
-                            {/* DEPARTMENT */}
-
                             <td>
-                              {
-                                employee.department ||
-                                "-"
-                              }
+                              {employee.department || "-"}
                             </td>
-
-                            {/* DATE */}
 
                             <td className="attendance-date">
-                              {formatDate(
-                                employee.date
-                              )}
+                              {formatDate(employee.date)}
                             </td>
-
-                            {/* CHECK IN */}
 
                             <td className="attendance-time">
-                              {
-                                employee.checkIn ||
-                                "-"
-                              }
+                              {employee.checkIn || "-"}
                             </td>
-
-                            {/* CHECK OUT */}
 
                             <td className="attendance-time">
-                              {
-                                employee.checkOut ||
-                                "-"
-                              }
+                              {employee.checkOut || "-"}
                             </td>
-
-                            {/* HOURS */}
 
                             <td>
 
@@ -1194,8 +1035,6 @@ const fetchEmployees = () => {
 
                             </td>
 
-                            {/* STATUS */}
-
                             <td>
 
                               <span
@@ -1203,24 +1042,16 @@ const fetchEmployees = () => {
                                   employee.status
                                     ? employee.status
                                         .toLowerCase()
-                                        .replace(
-                                          /\s+/g,
-                                          "-"
-                                        )
+                                        .replace(/\s+/g, "-")
                                     : ""
                                 }`}
                               >
 
-                                {
-                                  employee.status ||
-                                  "-"
-                                }
+                                {employee.status || "-"}
 
                               </span>
 
                             </td>
-
-                            {/* ACTION */}
 
                             <td>
 
@@ -1230,9 +1061,7 @@ const fetchEmployees = () => {
                                   type="button"
                                   className="attendance-action-btn attendance-view-btn"
                                   onClick={() =>
-                                    handleView(
-                                      employee
-                                    )
+                                    handleView(employee)
                                   }
                                   title="View"
                                 >
@@ -1326,9 +1155,7 @@ const fetchEmployees = () => {
 
         </div>
 
-        {/* =================================================
-            ATTENDANCE DETAILS MODAL
-        ================================================= */}
+        {/* ATTENDANCE DETAILS MODAL */}
 
         {selectedEmployee && (
 
@@ -1347,8 +1174,6 @@ const fetchEmployees = () => {
                 event.stopPropagation()
               }
             >
-
-              {/* HEADER */}
 
               <div className="attendance-modal-header">
 
@@ -1375,17 +1200,13 @@ const fetchEmployees = () => {
                 <button
                   type="button"
                   className="attendance-modal-close"
-                  onClick={
-                    closeDetails
-                  }
+                  onClick={closeDetails}
                   aria-label="Close attendance details"
                 >
                   <FaTimes />
                 </button>
 
               </div>
-
-              {/* BODY */}
 
               <div className="attendance-modal-body">
 
@@ -1394,9 +1215,7 @@ const fetchEmployees = () => {
                   <div className="attendance-profile-avatar">
 
                     {selectedEmployee.employee
-                      ? selectedEmployee.employee.charAt(
-                          0
-                        )
+                      ? selectedEmployee.employee.charAt(0)
                       : "?"}
 
                   </div>
@@ -1404,22 +1223,15 @@ const fetchEmployees = () => {
                   <div className="attendance-profile-info">
 
                     <h3>
-                      {
-                        selectedEmployee.employee
-                      }
+                      {selectedEmployee.employee}
                     </h3>
 
                     <span>
-                      {
-                        selectedEmployee.employeeId
-                      }
+                      {selectedEmployee.employeeId}
                     </span>
 
                     <small>
-                      {
-                        selectedEmployee.department ||
-                        "-"
-                      }
+                      {selectedEmployee.department || "-"}
                     </small>
 
                   </div>
@@ -1429,18 +1241,12 @@ const fetchEmployees = () => {
                       selectedEmployee.status
                         ? selectedEmployee.status
                             .toLowerCase()
-                            .replace(
-                              /\s+/g,
-                              "-"
-                            )
+                            .replace(/\s+/g, "-")
                         : ""
                     }`}
                   >
 
-                    {
-                      selectedEmployee.status ||
-                      "-"
-                    }
+                    {selectedEmployee.status || "-"}
 
                   </span>
 
@@ -1469,10 +1275,7 @@ const fetchEmployees = () => {
                     </span>
 
                     <strong>
-                      {
-                        selectedEmployee.status ||
-                        "-"
-                      }
+                      {selectedEmployee.status || "-"}
                     </strong>
 
                   </div>
@@ -1484,10 +1287,7 @@ const fetchEmployees = () => {
                     </span>
 
                     <strong>
-                      {
-                        selectedEmployee.checkIn ||
-                        "-"
-                      }
+                      {selectedEmployee.checkIn || "-"}
                     </strong>
 
                   </div>
@@ -1499,10 +1299,7 @@ const fetchEmployees = () => {
                     </span>
 
                     <strong>
-                      {
-                        selectedEmployee.checkOut ||
-                        "-"
-                      }
+                      {selectedEmployee.checkOut || "-"}
                     </strong>
 
                   </div>
@@ -1529,10 +1326,7 @@ const fetchEmployees = () => {
                     </span>
 
                     <strong>
-                      {
-                        selectedEmployee.department ||
-                        "-"
-                      }
+                      {selectedEmployee.department || "-"}
                     </strong>
 
                   </div>
@@ -1544,10 +1338,7 @@ const fetchEmployees = () => {
                     </span>
 
                     <strong>
-                      {
-                        selectedEmployee.notes ||
-                        "-"
-                      }
+                      {selectedEmployee.notes || "-"}
                     </strong>
 
                   </div>
@@ -1555,8 +1346,6 @@ const fetchEmployees = () => {
                 </div>
 
               </div>
-
-              {/* FOOTER */}
 
               <div className="attendance-modal-footer">
 
@@ -1566,19 +1355,14 @@ const fetchEmployees = () => {
 
                   {String(
                     selectedEmployee.id
-                  ).padStart(
-                    4,
-                    "0"
-                  )}
+                  ).padStart(4, "0")}
 
                 </span>
 
                 <button
                   type="button"
                   className="attendance-modal-close-btn"
-                  onClick={
-                    closeDetails
-                  }
+                  onClick={closeDetails}
                 >
                   Close
                 </button>
@@ -1591,17 +1375,13 @@ const fetchEmployees = () => {
 
         )}
 
-        {/* =================================================
-            MARK ATTENDANCE MODAL
-        ================================================= */}
+        {/* MARK ATTENDANCE MODAL */}
 
         {showAttendanceForm && (
 
           <div
             className="attendance-modal-overlay"
-            onClick={
-              closeAttendanceForm
-            }
+            onClick={closeAttendanceForm}
             role="presentation"
           >
 
@@ -1614,8 +1394,6 @@ const fetchEmployees = () => {
                 event.stopPropagation()
               }
             >
-
-              {/* FORM HEADER */}
 
               <div className="attendance-modal-header">
 
@@ -1642,9 +1420,7 @@ const fetchEmployees = () => {
                 <button
                   type="button"
                   className="attendance-modal-close"
-                  onClick={
-                    closeAttendanceForm
-                  }
+                  onClick={closeAttendanceForm}
                   disabled={formLoading}
                   aria-label="Close mark attendance form"
                 >
@@ -1653,12 +1429,8 @@ const fetchEmployees = () => {
 
               </div>
 
-              {/* FORM */}
-
               <form
-                onSubmit={
-                  handleSubmitAttendance
-                }
+                onSubmit={handleSubmitAttendance}
               >
 
                 <div className="attendance-form-body">
@@ -1686,12 +1458,8 @@ const fetchEmployees = () => {
                     <select
                       id="employee_id"
                       name="employee_id"
-                      value={
-                        formData.employee_id
-                      }
-                      onChange={
-                        handleFormChange
-                      }
+                      value={formData.employee_id}
+                      onChange={handleFormChange}
                       required
                     >
 
@@ -1703,18 +1471,17 @@ const fetchEmployees = () => {
                         (employee) => (
 
                           <option
-                            key={
-                              employee.id
-                            }
-                            value={
-                              employee.id
-                            }
+                            key={employee.id}
+                            value={employee.id}
                           >
+
                             {employee.employee_id
                               ? `${employee.employee_id} - `
                               : ""}
+
                             {employee.first_name}{" "}
                             {employee.last_name}
+
                           </option>
 
                         )
@@ -1736,12 +1503,8 @@ const fetchEmployees = () => {
                       id="attendance_date"
                       type="date"
                       name="attendance_date"
-                      value={
-                        formData.attendance_date
-                      }
-                      onChange={
-                        handleFormChange
-                      }
+                      value={formData.attendance_date}
+                      onChange={handleFormChange}
                       required
                     />
 
@@ -1750,8 +1513,6 @@ const fetchEmployees = () => {
                   {/* TIME ROW */}
 
                   <div className="attendance-form-row">
-
-                    {/* CHECK IN */}
 
                     <div className="attendance-form-group">
 
@@ -1763,17 +1524,11 @@ const fetchEmployees = () => {
                         id="check_in"
                         type="time"
                         name="check_in"
-                        value={
-                          formData.check_in
-                        }
-                        onChange={
-                          handleFormChange
-                        }
+                        value={formData.check_in}
+                        onChange={handleFormChange}
                       />
 
                     </div>
-
-                    {/* CHECK OUT */}
 
                     <div className="attendance-form-group">
 
@@ -1785,12 +1540,8 @@ const fetchEmployees = () => {
                         id="check_out"
                         type="time"
                         name="check_out"
-                        value={
-                          formData.check_out
-                        }
-                        onChange={
-                          handleFormChange
-                        }
+                        value={formData.check_out}
+                        onChange={handleFormChange}
                       />
 
                     </div>
@@ -1808,12 +1559,8 @@ const fetchEmployees = () => {
                     <select
                       id="status"
                       name="status"
-                      value={
-                        formData.status
-                      }
-                      onChange={
-                        handleFormChange
-                      }
+                      value={formData.status}
+                      onChange={handleFormChange}
                     >
 
                       <option value="Present">
@@ -1853,12 +1600,8 @@ const fetchEmployees = () => {
                       name="notes"
                       rows="4"
                       placeholder="Enter any attendance notes..."
-                      value={
-                        formData.notes
-                      }
-                      onChange={
-                        handleFormChange
-                      }
+                      value={formData.notes}
+                      onChange={handleFormChange}
                     />
 
                   </div>
@@ -1872,12 +1615,8 @@ const fetchEmployees = () => {
                   <button
                     type="button"
                     className="attendance-modal-cancel-btn"
-                    onClick={
-                      closeAttendanceForm
-                    }
-                    disabled={
-                      formLoading
-                    }
+                    onClick={closeAttendanceForm}
+                    disabled={formLoading}
                   >
                     Cancel
                   </button>
@@ -1885,9 +1624,7 @@ const fetchEmployees = () => {
                   <button
                     type="submit"
                     className="attendance-save-btn"
-                    disabled={
-                      formLoading
-                    }
+                    disabled={formLoading}
                   >
 
                     {formLoading ? (
