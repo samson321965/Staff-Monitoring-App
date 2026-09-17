@@ -53,9 +53,18 @@ const Reports = () => {
 
   const [error, setError] = useState("");
 
+  const getToday = () => new Date().toISOString().split("T")[0];
+
+  const getMonthStart = () => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1)
+      .toISOString()
+      .split("T")[0];
+  };
+
   const [dateRange, setDateRange] = useState({
-    startDate: "2025-05-01",
-    endDate: "2025-05-20",
+    startDate: getMonthStart(),
+    endDate: getToday(),
   });
 
   const [reportType, setReportType] = useState("all");
@@ -67,7 +76,7 @@ const Reports = () => {
      LOAD REPORT DATA
      ===================================================== */
 
-  const loadReportData = async () => {
+  const loadReportData = async (selectedRange = dateRange) => {
     try {
       setLoading(true);
       setError("");
@@ -78,20 +87,29 @@ const Reports = () => {
         throw new Error("Your login session has expired. Please log in again.");
       }
 
+      if (!selectedRange.startDate || !selectedRange.endDate) {
+        throw new Error("Please select both a start date and an end date.");
+      }
+
+      if (selectedRange.startDate > selectedRange.endDate) {
+        throw new Error("Start date cannot be after the end date.");
+      }
+
       const query = new URLSearchParams({
-        startDate: dateRange.startDate,
-        endDate: dateRange.endDate,
+        startDate: selectedRange.startDate,
+        endDate: selectedRange.endDate,
         reportType,
         department,
       });
 
-      const response = await fetch(
-        `${API_URL}/reports/summary?${query.toString()}`,
-        {
-          method: "GET",
-          headers: getAuthHeaders(),
-        }
-      );
+      const requestUrl = `${API_URL}/reports/summary?${query.toString()}`;
+
+      console.log("Reports API request:", requestUrl);
+
+      const response = await fetch(requestUrl, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      });
 
   
 
@@ -110,6 +128,8 @@ const Reports = () => {
       }
 
       const data = await response.json();
+
+      console.log("Reports API response:", data);
 
       setSummary(
         data.summary || {
@@ -151,7 +171,7 @@ const Reports = () => {
 
   useEffect(() => {
     loadReportData();
-  }, []);
+  }, [dateRange.startDate, dateRange.endDate, reportType, department]);
 
 
   /* =====================================================
@@ -370,7 +390,7 @@ const Reports = () => {
             <div className="reports-error">
               {error}
 
-              <button onClick={loadReportData}>
+              <button onClick={() => loadReportData(dateRange)}>
                 <FiRefreshCw />
                 Retry
               </button>
@@ -733,13 +753,29 @@ const Reports = () => {
 
 
                   <div className="chart-x-axis">
-
-                    <span>1 May</span>
-                    <span>5 May</span>
-                    <span>10 May</span>
-                    <span>15 May</span>
-                    <span>20 May</span>
-
+                    {attendanceData.length > 0 ? (
+                      attendanceData
+                        .filter((_, index) => {
+                          const step = Math.max(
+                            1,
+                            Math.ceil(attendanceData.length / 5)
+                          );
+                          return (
+                            index % step === 0 ||
+                            index === attendanceData.length - 1
+                          );
+                        })
+                        .map((item, index) => (
+                          <span key={`${item.date}-${index}`}>
+                            {formatDate(item.date)}
+                          </span>
+                        ))
+                    ) : (
+                      <span>
+                        {formatDate(dateRange.startDate)} -{" "}
+                        {formatDate(dateRange.endDate)}
+                      </span>
+                    )}
                   </div>
 
                 </div>
@@ -1228,11 +1264,12 @@ const Reports = () => {
                   type="date"
                   className="date-input"
                   value={dateRange.startDate}
+                  max={dateRange.endDate}
                   onChange={(e) =>
-                    setDateRange({
-                      ...dateRange,
+                    setDateRange((current) => ({
+                      ...current,
                       startDate: e.target.value,
-                    })
+                    }))
                   }
                 />
 
@@ -1249,11 +1286,12 @@ const Reports = () => {
                   type="date"
                   className="date-input"
                   value={dateRange.endDate}
+                  min={dateRange.startDate}
                   onChange={(e) =>
-                    setDateRange({
-                      ...dateRange,
+                    setDateRange((current) => ({
+                      ...current,
                       endDate: e.target.value,
-                    })
+                    }))
                   }
                 />
 
