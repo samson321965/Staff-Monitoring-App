@@ -11,223 +11,98 @@ const getJwtSecret = () => {
     const secret = process.env.JWT_SECRET;
 
     if (!secret) {
-        throw new Error("JWT_SECRET is not configured. Check server/.env");
+        throw new Error(
+            "JWT_SECRET is not configured. Check server/.env"
+        );
     }
 
     return secret;
 };
 
-
-// ==========================================
-// LOGIN USER
+// ==================================================
+// LOGIN
 // POST /api/auth/login
-// ==========================================
+// ==================================================
 
 router.post("/login", async (req, res) => {
-
     try {
-
         const { email, password } = req.body;
 
-
-        // ==========================================
-        // VALIDATE INPUT
-        // ==========================================
-
         if (!email || !password) {
-
             return res.status(400).json({
-                message:
-                    "Email and password are required",
+                message: "Email and password are required"
             });
-
         }
-
-
-        // ==========================================
-        // FIND USER
-        // ==========================================
 
         const result = await pool.query(
             `
             SELECT
-                id,
-                employee_id,
-                username,
-                email,
-                password,
-                role,
-                is_active
-            FROM users
-            WHERE LOWER(email) = LOWER($1)
+                u.id,
+                u.employee_id,
+                u.username,
+                u.email,
+                u.password_hash,
+                u.is_active,
+                r.role_name
+            FROM users u
+            INNER JOIN roles r
+                ON u.role_id = r.id
+            WHERE LOWER(u.email) = LOWER($1)
             `,
             [email.trim()]
         );
 
-
-        // ==========================================
-        // USER NOT FOUND
-        // ==========================================
-
         if (result.rows.length === 0) {
-
             return res.status(401).json({
-                message:
-                    "Invalid email or password",
+                message: "Invalid email or password"
             });
-
         }
-
 
         const user = result.rows[0];
 
-
-        // ==========================================
-        // CHECK ACCOUNT STATUS
-        // ==========================================
-
         if (!user.is_active) {
-
             return res.status(403).json({
-                message:
-                    "This account has been disabled",
+                message: "Account is disabled"
             });
-
         }
 
-
-        // ==========================================
-        // CHECK USER ROLE
-        // ==========================================
-
-        const allowedRoles = [
-
-            "system_admin",
-
-            "commission",
-
-            "director",
-
-            "deputy_director",
-
-            "manager",
-
-            "ict_officer",
-
-            "hr",
-
-            "finance",
-
-            "compliance",
-
-            "officer",
-
-            "employee",
-
-        ];
-
-
-        if (!allowedRoles.includes(user.role)) {
-
-            console.error(
-                `Invalid role "${user.role}" for user ${user.email}`
-            );
-
-            return res.status(403).json({
-
-                message:
-                    "Your account has an invalid system role. Please contact the system administrator.",
-
-            });
-
-        }
-
-
-        // ==========================================
-        // COMPARE PASSWORD
-        // ==========================================
-
-        const passwordMatch =
-            await bcrypt.compare(
-                password,
-                user.password
-            );
-
-
-        if (!passwordMatch) {
-
-            return res.status(401).json({
-                message:
-                    "Invalid email or password",
-            });
-
-        }
-
-
-        // ==========================================
-        // CREATE JWT TOKEN
-        // ==========================================
-
-        const token = jwt.sign(
-
-            {
-
-                id: user.id,
-
-                employee_id:
-                    user.employee_id,
-
-                email:
-                    user.email,
-
-                role:
-                    user.role,
-
-            },
-
-            getJwtSecret(),
-
-            {
-
-                expiresIn: "8h",
-
-            }
-
+        const passwordMatch = await bcrypt.compare(
+            password,
+            user.password_hash
         );
 
+        if (!passwordMatch) {
+            return res.status(401).json({
+                message: "Invalid email or password"
+            });
+        }
 
-        // ==========================================
-        // SEND LOGIN RESPONSE
-        // ==========================================
+        const token = jwt.sign(
+            {
+                id: user.id,
+                employee_id: user.employee_id,
+                email: user.email,
+                role: user.role_name
+            },
+            getJwtSecret(),
+            {
+                expiresIn: "8h"
+            }
+        );
 
-        res.status(200).json({
-
-            message:
-                "Login successful",
+        return res.status(200).json({
+            message: "Login successful",
 
             token,
 
             user: {
-
-                id:
-                    user.id,
-
-                employee_id:
-                    user.employee_id,
-
-                username:
-                    user.username,
-
-                email:
-                    user.email,
-
-                role:
-                    user.role,
-
-            },
-
+                id: user.id,
+                employee_id: user.employee_id,
+                username: user.username,
+                email: user.email,
+                role: user.role_name
+            }
         });
-
 
     } catch (error) {
 
@@ -236,26 +111,18 @@ router.post("/login", async (req, res) => {
             error
         );
 
-
-        res.status(500).json({
-
-            message:
-                "Server error during login",
-
-            error:
-                error.message,
-
+        return res.status(500).json({
+            message: "Server error during login",
+            error: error.message
         });
 
     }
-
 });
 
-
-// ==========================================
+// ==================================================
 // CHANGE PASSWORD
 // PUT /api/auth/change-password
-// ==========================================
+// ==================================================
 
 router.put(
     "/change-password",
@@ -266,164 +133,80 @@ router.put(
 
             const {
                 currentPassword,
-                newPassword,
+                newPassword
             } = req.body;
-
-
-            // ==========================================
-            // VALIDATE INPUT
-            // ==========================================
 
             if (
                 !currentPassword ||
                 !newPassword
             ) {
-
                 return res.status(400).json({
-
                     message:
-                        "Current password and new password are required",
-
+                        "Current password and new password are required"
                 });
-
             }
-
-
-            // ==========================================
-            // PASSWORD LENGTH
-            // ==========================================
 
             if (newPassword.length < 8) {
-
                 return res.status(400).json({
-
                     message:
-                        "New password must be at least 8 characters long",
-
+                        "New password must be at least 8 characters long"
                 });
-
             }
-
-
-            // ==========================================
-            // GET USER ID FROM JWT
-            // ==========================================
 
             const userId = req.user.id;
 
-
-            // ==========================================
-            // FIND USER
-            // ==========================================
-
             const result = await pool.query(
-
                 `
                 SELECT
                     id,
-                    password,
+                    password_hash,
                     is_active
                 FROM users
                 WHERE id = $1
                 `,
-
                 [userId]
-
             );
 
-
-            // ==========================================
-            // USER NOT FOUND
-            // ==========================================
-
-            if (
-                result.rows.length === 0
-            ) {
-
+            if (result.rows.length === 0) {
                 return res.status(404).json({
-
-                    message:
-                        "User not found",
-
+                    message: "User not found"
                 });
-
             }
-
 
             const user = result.rows[0];
 
-
-            // ==========================================
-            // CHECK ACCOUNT STATUS
-            // ==========================================
-
             if (!user.is_active) {
-
                 return res.status(403).json({
-
                     message:
-                        "This account has been disabled",
-
+                        "This account has been disabled"
                 });
-
             }
-
-
-            // ==========================================
-            // VERIFY CURRENT PASSWORD
-            // ==========================================
 
             const validPassword =
                 await bcrypt.compare(
-
                     currentPassword,
-
-                    user.password
-
+                    user.password_hash
                 );
 
-
             if (!validPassword) {
-
                 return res.status(401).json({
-
                     message:
-                        "Current password is incorrect",
-
+                        "Current password is incorrect"
                 });
-
             }
-
-
-            // ==========================================
-            // MAKE SURE PASSWORD IS DIFFERENT
-            // ==========================================
 
             const samePassword =
                 await bcrypt.compare(
-
                     newPassword,
-
-                    user.password
-
+                    user.password_hash
                 );
 
-
             if (samePassword) {
-
                 return res.status(400).json({
-
                     message:
-                        "New password must be different from your current password",
-
+                        "New password must be different from current password"
                 });
-
             }
-
-
-            // ==========================================
-            // HASH NEW PASSWORD
-            // ==========================================
 
             const hashedPassword =
                 await bcrypt.hash(
@@ -431,36 +214,23 @@ router.put(
                     10
                 );
 
-
-            // ==========================================
-            // UPDATE DATABASE
-            // ==========================================
-
             await pool.query(
-
                 `
                 UPDATE users
-                SET password = $1
+                SET
+                    password_hash = $1,
+                    password_changed_at = CURRENT_TIMESTAMP
                 WHERE id = $2
                 `,
-
                 [
                     hashedPassword,
-                    userId,
+                    userId
                 ]
-
             );
 
-
-            // ==========================================
-            // SUCCESS
-            // ==========================================
-
             return res.status(200).json({
-
                 message:
-                    "Password updated successfully",
-
+                    "Password updated successfully"
             });
 
         } catch (error) {
@@ -471,10 +241,8 @@ router.put(
             );
 
             return res.status(500).json({
-
                 message:
-                    "Server error while changing password",
-
+                    "Server error while changing password"
             });
 
         }
@@ -482,6 +250,4 @@ router.put(
     }
 );
 
-
 module.exports = router;
-
