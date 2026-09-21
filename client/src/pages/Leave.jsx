@@ -34,17 +34,16 @@ const Leave = () => {
   const [status, setStatus] = useState("All Status");
   const [dateFilter, setDateFilter] = useState("All Dates");
 
-
   /* =====================================================
      DATA STATES
   ===================================================== */
 
   const [leaveData, setLeaveData] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [leaveTypes, setLeaveTypes] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
 
   /* =====================================================
      MODAL STATES
@@ -53,21 +52,19 @@ const Leave = () => {
   const [selectedLeave, setSelectedLeave] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
-
   /* =====================================================
      ADD LEAVE FORM
   ===================================================== */
 
   const [formData, setFormData] = useState({
     employee_id: "",
-    leave_type: "Annual Leave",
+    leave_type: "",
     start_date: "",
     end_date: "",
     reason: "",
   });
 
   const [saving, setSaving] = useState(false);
-
 
   /* =====================================================
      FETCH LEAVE DATA
@@ -83,30 +80,30 @@ const Leave = () => {
       });
 
       if (!response.ok) {
-        throw new Error(
-          "Failed to fetch leave applications"
+        const errorText = await response.text();
+
+        console.error(
+          "Leave API error:",
+          response.status,
+          errorText
         );
+
+        throw new Error("Failed to fetch leave applications");
       }
 
       const data = await response.json();
 
-      setLeaveData(data);
-
+      setLeaveData(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error(
-        "Error fetching leave data:",
-        err
-      );
+      console.error("Error fetching leave data:", err);
 
       setError(
         "Unable to load leave applications from the server."
       );
-
     } finally {
       setLoading(false);
     }
   };
-
 
   /* =====================================================
      FETCH EMPLOYEES
@@ -114,28 +111,122 @@ const Leave = () => {
 
   const fetchEmployees = async () => {
     try {
-      const response = await fetch(buildApiUrl("/employees"), {
-        headers: getAuthHeaders(),
-      });
+      const response = await fetch(
+        buildApiUrl("/employees"),
+        {
+          headers: getAuthHeaders(),
+        }
+      );
 
       if (!response.ok) {
-        throw new Error(
-          "Failed to fetch employees"
+        const errorText = await response.text();
+
+        console.error(
+          "Employee API error:",
+          response.status,
+          errorText
         );
+
+        throw new Error("Failed to fetch employees");
       }
 
       const data = await response.json();
 
-      setEmployees(data);
+      console.log("EMPLOYEES FROM API:", data);
 
+      if (Array.isArray(data)) {
+        setEmployees(data);
+      } else {
+        console.error(
+          "Employees API did not return an array:",
+          data
+        );
+
+        setEmployees([]);
+      }
     } catch (err) {
       console.error(
         "Error fetching employees:",
         err
       );
+
+      setEmployees([]);
+
+      setError(
+        "Unable to load employees from the server."
+      );
     }
   };
 
+  /* =====================================================
+     FETCH ACTIVE LEAVE TYPES
+  ===================================================== */
+
+  const fetchLeaveTypes = async () => {
+    try {
+      const response = await fetch(
+        buildApiUrl("/leaves/types"),
+        {
+          headers: getAuthHeaders(),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+
+        console.error(
+          "Leave types API error:",
+          response.status,
+          errorText
+        );
+
+        throw new Error("Failed to fetch leave types");
+      }
+
+      const data = await response.json();
+
+      console.log(
+        "ACTIVE LEAVE TYPES FROM DATABASE:",
+        data
+      );
+
+      if (Array.isArray(data)) {
+        setLeaveTypes(data);
+
+        /*
+         * If there is no selected leave type yet,
+         * automatically select the first active
+         * leave type from PostgreSQL.
+         */
+        if (data.length > 0) {
+          setFormData((current) => ({
+            ...current,
+            leave_type:
+              current.leave_type ||
+              data[0].leave_type,
+          }));
+        }
+      } else {
+        console.error(
+          "Leave types API did not return an array:",
+          data
+        );
+
+        setLeaveTypes([]);
+      }
+    } catch (err) {
+      console.error(
+        "Error fetching leave types:",
+        err
+      );
+
+      setLeaveTypes([]);
+
+      setError(
+        "Unable to load leave types from the database."
+      );
+    }
+  };
 
   /* =====================================================
      INITIAL LOAD
@@ -144,41 +235,32 @@ const Leave = () => {
   useEffect(() => {
     fetchLeaveData();
     fetchEmployees();
+    fetchLeaveTypes();
   }, []);
-
 
   /* =====================================================
      STATISTICS
   ===================================================== */
 
-  const totalApplications =
-    leaveData.length;
+  const totalApplications = leaveData.length;
 
-  const approved =
-    leaveData.filter(
-      (item) =>
-        item.status === "Approved"
-    ).length;
+  const approved = leaveData.filter(
+    (item) => item.status === "Approved"
+  ).length;
 
-  const pending =
-    leaveData.filter(
-      (item) =>
-        item.status === "Pending"
-    ).length;
+  const pending = leaveData.filter(
+    (item) => item.status === "Pending"
+  ).length;
 
-  const rejected =
-    leaveData.filter(
-      (item) =>
-        item.status === "Rejected"
-    ).length;
+  const rejected = leaveData.filter(
+    (item) => item.status === "Rejected"
+  ).length;
 
-  const totalLeaveDays =
-    leaveData.reduce(
-      (total, item) =>
-        total + Number(item.days || 0),
-      0
-    );
-
+  const totalLeaveDays = leaveData.reduce(
+    (total, item) =>
+      total + Number(item.total_days ?? item.days ?? 0),
+    0
+  );
 
   /* =====================================================
      DATE FILTER
@@ -189,9 +271,15 @@ const Leave = () => {
       return true;
     }
 
-    const startDate = new Date(
-      item.startDate
-    );
+    const rawDate =
+      item.startDate ||
+      item.start_date;
+
+    const startDate = new Date(rawDate);
+
+    if (Number.isNaN(startDate.getTime())) {
+      return false;
+    }
 
     const today = new Date();
 
@@ -205,20 +293,19 @@ const Leave = () => {
     }
 
     if (dateFilter === "This Week") {
-      const weekStart =
-        new Date(today);
+      const weekStart = new Date(today);
 
       weekStart.setDate(
-        today.getDate() -
-          today.getDay()
+        today.getDate() - today.getDay()
       );
 
-      const weekEnd =
-        new Date(weekStart);
+      const weekEnd = new Date(weekStart);
 
       weekEnd.setDate(
         weekStart.getDate() + 6
       );
+
+      weekEnd.setHours(23, 59, 59, 999);
 
       return (
         startDate >= weekStart &&
@@ -238,60 +325,58 @@ const Leave = () => {
     return true;
   };
 
-
   /* =====================================================
      FILTER DATA
   ===================================================== */
 
-  const filteredData =
-    leaveData.filter((item) => {
-      const search =
-        searchTerm
-          .toLowerCase()
-          .trim();
+  const filteredData = leaveData.filter((item) => {
+    const search = searchTerm
+      .toLowerCase()
+      .trim();
 
-      const employeeName =
-        String(
-          item.employee || ""
-        ).toLowerCase();
+    const employeeName = String(
+      item.employee || ""
+    ).toLowerCase();
 
-      const employeeId =
-        String(
-          item.employeeId || ""
-        ).toLowerCase();
+    const employeeId = String(
+      item.employeeId ||
+      item.employee_code ||
+      ""
+    ).toLowerCase();
 
-      const searchMatch =
-        !search ||
-        employeeName.includes(search) ||
-        employeeId.includes(search);
+    const searchMatch =
+      !search ||
+      employeeName.includes(search) ||
+      employeeId.includes(search);
 
-      const departmentMatch =
-        department ===
-          "All Departments" ||
-        item.department ===
-          department;
+    const departmentMatch =
+      department === "All Departments" ||
+      item.department === department ||
+      item.department_name === department;
 
-      const leaveTypeMatch =
-        leaveType === "All Types" ||
-        item.leaveType ===
-          leaveType;
+    const currentLeaveType =
+      item.leaveType ||
+      item.leave_type ||
+      "";
 
-      const statusMatch =
-        status === "All Status" ||
-        item.status === status;
+    const leaveTypeMatch =
+      leaveType === "All Types" ||
+      currentLeaveType === leaveType;
 
-      const dateMatch =
-        isDateMatch(item);
+    const statusMatch =
+      status === "All Status" ||
+      item.status === status;
 
-      return (
-        searchMatch &&
-        departmentMatch &&
-        leaveTypeMatch &&
-        statusMatch &&
-        dateMatch
-      );
-    });
+    const dateMatch = isDateMatch(item);
 
+    return (
+      searchMatch &&
+      departmentMatch &&
+      leaveTypeMatch &&
+      statusMatch &&
+      dateMatch
+    );
+  });
 
   /* =====================================================
      REFRESH
@@ -300,8 +385,8 @@ const Leave = () => {
   const handleRefresh = () => {
     fetchLeaveData();
     fetchEmployees();
+    fetchLeaveTypes();
   };
-
 
   /* =====================================================
      ADD LEAVE BUTTON
@@ -310,7 +395,10 @@ const Leave = () => {
   const handleAddLeave = () => {
     setFormData({
       employee_id: "",
-      leave_type: "Annual Leave",
+      leave_type:
+        leaveTypes.length > 0
+          ? leaveTypes[0].leave_type
+          : "",
       start_date: "",
       end_date: "",
       reason: "",
@@ -320,14 +408,12 @@ const Leave = () => {
     setShowAddModal(true);
   };
 
-
   /* =====================================================
      FORM INPUT
   ===================================================== */
 
   const handleFormChange = (event) => {
-    const { name, value } =
-      event.target;
+    const { name, value } = event.target;
 
     setFormData((current) => ({
       ...current,
@@ -335,18 +421,16 @@ const Leave = () => {
     }));
   };
 
-
   /* =====================================================
      CREATE LEAVE
   ===================================================== */
 
-  const handleSubmitLeave = async (
-    event
-  ) => {
+  const handleSubmitLeave = async (event) => {
     event.preventDefault();
 
     if (
       !formData.employee_id ||
+      !formData.leave_type ||
       !formData.start_date ||
       !formData.end_date
     ) {
@@ -366,28 +450,64 @@ const Leave = () => {
       return;
     }
 
+    /*
+     * Make sure the selected leave type actually
+     * exists in the active leave types loaded
+     * from PostgreSQL.
+     */
+    const selectedType = leaveTypes.find(
+      (type) =>
+        String(type.leave_type).trim().toLowerCase() ===
+        String(formData.leave_type).trim().toLowerCase()
+    );
+
+    if (!selectedType) {
+      setError(
+        "Please select a valid active leave type."
+      );
+      return;
+    }
+
+    /*
+     * IMPORTANT:
+     * Send the exact leave_type value from PostgreSQL,
+     * not a hard-coded frontend value.
+     */
+    const submitData = {
+      employee_id: formData.employee_id,
+      leave_type: selectedType.leave_type,
+      start_date: formData.start_date,
+      end_date: formData.end_date,
+      reason: formData.reason,
+    };
+
     try {
       setSaving(true);
       setError("");
 
-      const response = await fetch(
-        API_URL,
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify(
-            formData
-          ),
-        }
+      console.log(
+        "SUBMITTING LEAVE:",
+        submitData
       );
 
-      const data =
-        await response.json();
+      const response = await fetch(API_URL, {
+        method: "POST",
+
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify(submitData),
+      });
+
+      const data = await response.json();
+
+      console.log(
+        "ADD LEAVE RESPONSE:",
+        response.status,
+        data
+      );
 
       if (!response.ok) {
         throw new Error(
@@ -398,12 +518,22 @@ const Leave = () => {
 
       setShowAddModal(false);
 
+      setFormData({
+        employee_id: "",
+        leave_type:
+          leaveTypes.length > 0
+            ? leaveTypes[0].leave_type
+            : "",
+        start_date: "",
+        end_date: "",
+        reason: "",
+      });
+
       await fetchLeaveData();
 
       alert(
         "Leave request created successfully."
       );
-
     } catch (err) {
       console.error(
         "Error creating leave:",
@@ -414,12 +544,10 @@ const Leave = () => {
         err.message ||
           "Failed to create leave request."
       );
-
     } finally {
       setSaving(false);
     }
   };
-
 
   /* =====================================================
      VIEW
@@ -429,11 +557,9 @@ const Leave = () => {
     setSelectedLeave(leave);
   };
 
-
   const closeLeaveDetails = () => {
     setSelectedLeave(null);
   };
-
 
   /* =====================================================
      UPDATE STATUS
@@ -452,8 +578,8 @@ const Leave = () => {
           method: "PUT",
 
           headers: {
-            "Content-Type":
-              "application/json",
+            ...getAuthHeaders(),
+            "Content-Type": "application/json",
           },
 
           body: JSON.stringify({
@@ -462,8 +588,7 @@ const Leave = () => {
         }
       );
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -475,7 +600,6 @@ const Leave = () => {
       await fetchLeaveData();
 
       return true;
-
     } catch (err) {
       console.error(
         "Error updating leave status:",
@@ -491,55 +615,53 @@ const Leave = () => {
     }
   };
 
-
   /* =====================================================
      APPROVE
   ===================================================== */
 
   const handleApprove = async (id) => {
-    const confirmed =
-      window.confirm(
-        "Are you sure you want to approve this leave application?"
-      );
+    const confirmed = window.confirm(
+      "Are you sure you want to approve this leave application?"
+    );
 
     if (!confirmed) {
       return;
     }
 
-    await updateLeaveStatus(
+    const success = await updateLeaveStatus(
       id,
       "Approved"
     );
 
     if (
+      success &&
       selectedLeave &&
       selectedLeave.id === id
     ) {
       setSelectedLeave(null);
     }
   };
-
 
   /* =====================================================
      REJECT
   ===================================================== */
 
   const handleReject = async (id) => {
-    const confirmed =
-      window.confirm(
-        "Are you sure you want to reject this leave application?"
-      );
+    const confirmed = window.confirm(
+      "Are you sure you want to reject this leave application?"
+    );
 
     if (!confirmed) {
       return;
     }
 
-    await updateLeaveStatus(
+    const success = await updateLeaveStatus(
       id,
       "Rejected"
     );
 
     if (
+      success &&
       selectedLeave &&
       selectedLeave.id === id
     ) {
@@ -547,16 +669,14 @@ const Leave = () => {
     }
   };
 
-
   /* =====================================================
      DELETE
   ===================================================== */
 
   const handleDelete = async (id) => {
-    const confirmed =
-      window.confirm(
-        "Are you sure you want to delete this leave application?"
-      );
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this leave application?"
+    );
 
     if (!confirmed) {
       return;
@@ -569,11 +689,11 @@ const Leave = () => {
         `${API_URL}/${id}`,
         {
           method: "DELETE",
+          headers: getAuthHeaders(),
         }
       );
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -582,12 +702,10 @@ const Leave = () => {
         );
       }
 
-      setLeaveData(
-        (currentData) =>
-          currentData.filter(
-            (item) =>
-              item.id !== id
-          )
+      setLeaveData((currentData) =>
+        currentData.filter(
+          (item) => item.id !== id
+        )
       );
 
       if (
@@ -596,7 +714,6 @@ const Leave = () => {
       ) {
         setSelectedLeave(null);
       }
-
     } catch (err) {
       console.error(
         "Error deleting leave:",
@@ -610,7 +727,6 @@ const Leave = () => {
     }
   };
 
-
   /* =====================================================
      RENDER
   ===================================================== */
@@ -623,7 +739,6 @@ const Leave = () => {
       <div className="leave-sidebar">
         <Sidebar />
       </div>
-
 
       {/* MAIN CONTENT */}
 
@@ -656,7 +771,6 @@ const Leave = () => {
 
             </div>
 
-
             <div className="leave-header-actions">
 
               <button
@@ -667,7 +781,6 @@ const Leave = () => {
                 <FaSyncAlt />
                 <span>Refresh</span>
               </button>
-
 
               <button
                 type="button"
@@ -682,12 +795,13 @@ const Leave = () => {
 
           </div>
 
-
           {/* ERROR */}
 
           {error && (
             <div className="leave-error">
+
               <FaTimesCircle />
+
               <span>{error}</span>
 
               <button
@@ -698,9 +812,9 @@ const Leave = () => {
               >
                 <FaTimes />
               </button>
+
             </div>
           )}
-
 
           {/* STATISTICS */}
 
@@ -713,6 +827,7 @@ const Leave = () => {
               </div>
 
               <div className="stat-info">
+
                 <span>
                   Total Applications
                 </span>
@@ -724,10 +839,10 @@ const Leave = () => {
                 <small>
                   All leave applications
                 </small>
+
               </div>
 
             </div>
-
 
             <div className="leave-stat-card approved-card">
 
@@ -736,6 +851,7 @@ const Leave = () => {
               </div>
 
               <div className="stat-info">
+
                 <span>Approved</span>
 
                 <strong>
@@ -745,10 +861,10 @@ const Leave = () => {
                 <small>
                   Approved applications
                 </small>
+
               </div>
 
             </div>
-
 
             <div className="leave-stat-card pending-card">
 
@@ -757,6 +873,7 @@ const Leave = () => {
               </div>
 
               <div className="stat-info">
+
                 <span>Pending</span>
 
                 <strong>
@@ -766,10 +883,10 @@ const Leave = () => {
                 <small>
                   Waiting for approval
                 </small>
+
               </div>
 
             </div>
-
 
             <div className="leave-stat-card rejected-card">
 
@@ -778,6 +895,7 @@ const Leave = () => {
               </div>
 
               <div className="stat-info">
+
                 <span>Rejected</span>
 
                 <strong>
@@ -787,10 +905,10 @@ const Leave = () => {
                 <small>
                   Rejected applications
                 </small>
+
               </div>
 
             </div>
-
 
             <div className="leave-stat-card days-card">
 
@@ -799,6 +917,7 @@ const Leave = () => {
               </div>
 
               <div className="stat-info">
+
                 <span>
                   Total Leave Days
                 </span>
@@ -810,12 +929,12 @@ const Leave = () => {
                 <small>
                   Days requested
                 </small>
+
               </div>
 
             </div>
 
           </div>
-
 
           {/* TABLE */}
 
@@ -858,7 +977,6 @@ const Leave = () => {
 
               </div>
 
-
               <div className="filter-select">
 
                 <select
@@ -894,6 +1012,7 @@ const Leave = () => {
 
               </div>
 
+              {/* DATABASE LEAVE TYPE FILTER */}
 
               <div className="filter-select">
 
@@ -905,31 +1024,27 @@ const Leave = () => {
                     )
                   }
                 >
-                  <option>
+
+                  <option value="All Types">
                     All Types
                   </option>
 
-                  <option>
-                    Annual Leave
-                  </option>
+                  {leaveTypes.map(
+                    (type) => (
+                      <option
+                        key={type.id}
+                        value={type.leave_type}
+                      >
+                        {type.leave_type}
+                      </option>
+                    )
+                  )}
 
-                  <option>
-                    Sick Leave
-                  </option>
-
-                  <option>
-                    Family Leave
-                  </option>
-
-                  <option>
-                    Other Leave
-                  </option>
                 </select>
 
                 <FaChevronDown />
 
               </div>
-
 
               <div className="filter-select">
 
@@ -962,7 +1077,6 @@ const Leave = () => {
 
               </div>
 
-
               <div className="leave-search">
 
                 <FaSearch />
@@ -981,7 +1095,6 @@ const Leave = () => {
               </div>
 
             </div>
-
 
             {/* TABLE */}
 
@@ -1004,207 +1117,244 @@ const Leave = () => {
 
                 </thead>
 
-
                 <tbody>
 
                   {loading ? (
 
                     <tr>
+
                       <td
                         colSpan="8"
                         className="no-data"
                       >
+
                         <FaSyncAlt className="loading-icon" />
+
                         <span>
                           Loading leave applications...
                         </span>
+
                       </td>
+
                     </tr>
 
                   ) : filteredData.length > 0 ? (
 
                     filteredData.map(
-                      (leave) => (
+                      (leave) => {
 
-                        <tr key={leave.id}>
+                        const displayLeaveType =
+                          leave.leaveType ||
+                          leave.leave_type ||
+                          "";
 
-                          <td>
+                        const displayStartDate =
+                          leave.startDate ||
+                          leave.start_date ||
+                          "";
 
-                            <div className="employee-cell">
+                        const displayEndDate =
+                          leave.endDate ||
+                          leave.end_date ||
+                          "";
 
-                              <div className="employee-avatar">
-                                {leave.employee
-                                  ?.charAt(0)
-                                  ?.toUpperCase()}
+                        const displayDays =
+                          leave.days ??
+                          leave.total_days ??
+                          0;
+
+                        const displayEmployeeId =
+                          leave.employeeId ||
+                          leave.employee_code ||
+                          "";
+
+                        const displayDepartment =
+                          leave.department ||
+                          leave.department_name ||
+                          "";
+
+                        return (
+                          <tr key={leave.id}>
+
+                            <td>
+
+                              <div className="employee-cell">
+
+                                <div className="employee-avatar">
+
+                                  {leave.employee
+                                    ?.charAt(0)
+                                    ?.toUpperCase()}
+
+                                </div>
+
+                                <div className="employee-details">
+
+                                  <strong>
+                                    {leave.employee}
+                                  </strong>
+
+                                  <span>
+                                    {displayEmployeeId}
+                                  </span>
+
+                                </div>
+
                               </div>
 
-                              <div className="employee-details">
+                            </td>
 
-                                <strong>
-                                  {leave.employee}
-                                </strong>
+                            <td>
+                              {displayDepartment ||
+                                "No Department"}
+                            </td>
 
-                                <span>
-                                  {leave.employeeId}
-                                </span>
+                            <td>
+
+                              <span
+                                className={`leave-type ${String(
+                                  displayLeaveType
+                                )
+                                  .toLowerCase()
+                                  .replace(
+                                    /\s+/g,
+                                    "-"
+                                  )}`}
+                              >
+                                {displayLeaveType}
+                              </span>
+
+                            </td>
+
+                            <td>
+                              {displayStartDate}
+                            </td>
+
+                            <td>
+                              {displayEndDate}
+                            </td>
+
+                            <td>
+
+                              <strong className="days-number">
+                                {displayDays}
+                              </strong>
+
+                            </td>
+
+                            <td>
+
+                              <span
+                                className={`status-badge ${String(
+                                  leave.status
+                                ).toLowerCase()}`}
+                              >
+                                {leave.status}
+                              </span>
+
+                            </td>
+
+                            <td>
+
+                              <div className="action-buttons">
+
+                                <button
+                                  type="button"
+                                  className="action-btn view-btn"
+                                  onClick={() =>
+                                    handleView(
+                                      leave
+                                    )
+                                  }
+                                  title="View"
+                                >
+                                  <FaEye />
+
+                                  <span>
+                                    View
+                                  </span>
+                                </button>
+
+                                {leave.status ===
+                                  "Pending" && (
+
+                                  <>
+
+                                    <button
+                                      type="button"
+                                      className="action-btn approve-btn"
+                                      onClick={() =>
+                                        handleApprove(
+                                          leave.id
+                                        )
+                                      }
+                                      title="Approve"
+                                    >
+                                      <FaCheck />
+
+                                      <span>
+                                        Approve
+                                      </span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      className="action-btn reject-btn"
+                                      onClick={() =>
+                                        handleReject(
+                                          leave.id
+                                        )
+                                      }
+                                      title="Reject"
+                                    >
+                                      <FaTimes />
+
+                                      <span>
+                                        Reject
+                                      </span>
+                                    </button>
+
+                                  </>
+
+                                )}
+
+                                <button
+                                  type="button"
+                                  className="action-btn delete-btn"
+                                  onClick={() =>
+                                    handleDelete(
+                                      leave.id
+                                    )
+                                  }
+                                  title="Delete"
+                                >
+                                  <FaTrash />
+
+                                  <span>
+                                    Delete
+                                  </span>
+                                </button>
 
                               </div>
 
-                            </div>
+                            </td>
 
-                          </td>
-
-
-                          <td>
-                            {leave.department ||
-                              "No Department"}
-                          </td>
-
-
-                          <td>
-
-                            <span
-                              className={`leave-type ${String(
-                                leave.leaveType
-                              )
-                                .toLowerCase()
-                                .replace(
-                                  /\s+/g,
-                                  "-"
-                                )}`}
-                            >
-                              {leave.leaveType}
-                            </span>
-
-                          </td>
-
-
-                          <td>
-                            {leave.startDate}
-                          </td>
-
-
-                          <td>
-                            {leave.endDate}
-                          </td>
-
-
-                          <td>
-                            <strong className="days-number">
-                              {leave.days}
-                            </strong>
-                          </td>
-
-
-                          <td>
-
-                            <span
-                              className={`status-badge ${String(
-                                leave.status
-                              ).toLowerCase()}`}
-                            >
-                              {leave.status}
-                            </span>
-
-                          </td>
-
-
-                          <td>
-
-                            <div className="action-buttons">
-
-                              <button
-                                type="button"
-                                className="action-btn view-btn"
-                                onClick={() =>
-                                  handleView(
-                                    leave
-                                  )
-                                }
-                                title="View"
-                              >
-                                <FaEye />
-                                <span>
-                                  View
-                                </span>
-                              </button>
-
-
-                              {leave.status ===
-                                "Pending" && (
-
-                                <>
-                                  <button
-                                    type="button"
-                                    className="action-btn approve-btn"
-                                    onClick={() =>
-                                      handleApprove(
-                                        leave.id
-                                      )
-                                    }
-                                    title="Approve"
-                                  >
-                                    <FaCheck />
-                                    <span>
-                                      Approve
-                                    </span>
-                                  </button>
-
-
-                                  <button
-                                    type="button"
-                                    className="action-btn reject-btn"
-                                    onClick={() =>
-                                      handleReject(
-                                        leave.id
-                                      )
-                                    }
-                                    title="Reject"
-                                  >
-                                    <FaTimes />
-                                    <span>
-                                      Reject
-                                    </span>
-                                  </button>
-                                </>
-
-                              )}
-
-
-                              <button
-                                type="button"
-                                className="action-btn delete-btn"
-                                onClick={() =>
-                                  handleDelete(
-                                    leave.id
-                                  )
-                                }
-                                title="Delete"
-                              >
-                                <FaTrash />
-                                <span>
-                                  Delete
-                                </span>
-                              </button>
-
-                            </div>
-
-                          </td>
-
-                        </tr>
-
-                      )
+                          </tr>
+                        );
+                      }
                     )
 
                   ) : (
 
                     <tr>
+
                       <td
                         colSpan="8"
                         className="no-data"
                       >
                         No leave applications found.
                       </td>
+
                     </tr>
 
                   )}
@@ -1215,17 +1365,18 @@ const Leave = () => {
 
             </div>
 
-
             {/* FOOTER */}
 
             <div className="leave-table-footer">
 
               <span>
+
                 Showing{" "}
                 {filteredData.length}{" "}
                 of{" "}
                 {leaveData.length}{" "}
                 leave applications
+
               </span>
 
               <div className="pagination">
@@ -1259,7 +1410,6 @@ const Leave = () => {
 
         </div>
 
-
         {/* =================================================
             VIEW LEAVE MODAL
         ================================================= */}
@@ -1268,9 +1418,7 @@ const Leave = () => {
 
           <div
             className="leave-modal-overlay"
-            onClick={
-              closeLeaveDetails
-            }
+            onClick={closeLeaveDetails}
             role="presentation"
           >
 
@@ -1306,7 +1454,6 @@ const Leave = () => {
 
                 </div>
 
-
                 <button
                   type="button"
                   className="leave-modal-close"
@@ -1319,17 +1466,17 @@ const Leave = () => {
 
               </div>
 
-
               <div className="leave-modal-body">
 
                 <div className="leave-profile-card">
 
                   <div className="leave-profile-avatar">
+
                     {selectedLeave.employee
                       ?.charAt(0)
                       ?.toUpperCase()}
-                  </div>
 
+                  </div>
 
                   <div className="leave-profile-info">
 
@@ -1338,16 +1485,17 @@ const Leave = () => {
                     </h3>
 
                     <span>
-                      {selectedLeave.employeeId}
+                      {selectedLeave.employeeId ||
+                        selectedLeave.employee_code}
                     </span>
 
                     <small>
                       {selectedLeave.department ||
+                        selectedLeave.department_name ||
                         "No Department"}
                     </small>
 
                   </div>
-
 
                   <span
                     className={`modal-status-badge ${String(
@@ -1359,59 +1507,72 @@ const Leave = () => {
 
                 </div>
 
-
                 <div className="leave-detail-grid">
 
                   <div className="leave-detail-item">
+
                     <span>
                       Leave Type
                     </span>
 
                     <strong>
-                      {selectedLeave.leaveType}
+                      {selectedLeave.leaveType ||
+                        selectedLeave.leave_type}
                     </strong>
+
                   </div>
 
-
                   <div className="leave-detail-item">
+
                     <span>
                       Total Days
                     </span>
 
                     <strong>
-                      {selectedLeave.days}{" "}
+
+                      {selectedLeave.days ??
+                        selectedLeave.total_days ??
+                        0}{" "}
+
                       {Number(
-                        selectedLeave.days
+                        selectedLeave.days ??
+                        selectedLeave.total_days ??
+                        0
                       ) === 1
                         ? "Day"
                         : "Days"}
+
                     </strong>
+
                   </div>
 
-
                   <div className="leave-detail-item">
+
                     <span>
                       Start Date
                     </span>
 
                     <strong>
-                      {selectedLeave.startDate}
+                      {selectedLeave.startDate ||
+                        selectedLeave.start_date}
                     </strong>
+
                   </div>
 
-
                   <div className="leave-detail-item">
+
                     <span>
                       End Date
                     </span>
 
                     <strong>
-                      {selectedLeave.endDate}
+                      {selectedLeave.endDate ||
+                        selectedLeave.end_date}
                     </strong>
+
                   </div>
 
                 </div>
-
 
                 <div className="leave-reason-box">
 
@@ -1426,7 +1587,6 @@ const Leave = () => {
 
                 </div>
 
-
                 <div className="leave-timeline">
 
                   <div className="timeline-line"></div>
@@ -1436,30 +1596,35 @@ const Leave = () => {
                     <div className="timeline-dot"></div>
 
                     <div>
+
                       <span>
                         Leave Starts
                       </span>
 
                       <strong>
-                        {selectedLeave.startDate}
+                        {selectedLeave.startDate ||
+                          selectedLeave.start_date}
                       </strong>
+
                     </div>
 
                   </div>
-
 
                   <div className="timeline-item">
 
                     <div className="timeline-dot"></div>
 
                     <div>
+
                       <span>
                         Leave Ends
                       </span>
 
                       <strong>
-                        {selectedLeave.endDate}
+                        {selectedLeave.endDate ||
+                          selectedLeave.end_date}
                       </strong>
+
                     </div>
 
                   </div>
@@ -1468,16 +1633,16 @@ const Leave = () => {
 
               </div>
 
-
               <div className="leave-modal-footer">
 
                 <span>
+
                   Application #
                   {String(
                     selectedLeave.id
                   ).padStart(4, "0")}
-                </span>
 
+                </span>
 
                 <div className="leave-modal-actions">
 
@@ -1485,6 +1650,7 @@ const Leave = () => {
                     "Pending" && (
 
                     <>
+
                       <button
                         type="button"
                         className="modal-action reject"
@@ -1498,7 +1664,6 @@ const Leave = () => {
                         Reject
                       </button>
 
-
                       <button
                         type="button"
                         className="modal-action approve"
@@ -1511,10 +1676,10 @@ const Leave = () => {
                         <FaCheck />
                         Approve
                       </button>
+
                     </>
 
                   )}
-
 
                   <button
                     type="button"
@@ -1535,7 +1700,6 @@ const Leave = () => {
           </div>
 
         )}
-
 
         {/* =================================================
             ADD LEAVE MODAL
@@ -1584,7 +1748,6 @@ const Leave = () => {
 
                 </div>
 
-
                 <button
                   type="button"
                   className="leave-modal-close"
@@ -1598,7 +1761,6 @@ const Leave = () => {
 
               </div>
 
-
               <form
                 onSubmit={
                   handleSubmitLeave
@@ -1606,6 +1768,8 @@ const Leave = () => {
               >
 
                 <div className="leave-add-body">
+
+                  {/* EMPLOYEE */}
 
                   <div className="leave-form-group">
 
@@ -1625,7 +1789,9 @@ const Leave = () => {
                     >
 
                       <option value="">
-                        Select Employee
+                        {employees.length === 0
+                          ? "No employees available"
+                          : "Select Employee"}
                       </option>
 
                       {employees.map(
@@ -1635,9 +1801,10 @@ const Leave = () => {
                             key={employee.id}
                             value={employee.id}
                           >
-                            {employee.employee}
+                            {employee.first_name}{" "}
+                            {employee.last_name}
                             {" - "}
-                            {employee.employeeId}
+                            {employee.employee_code}
                           </option>
 
                         )
@@ -1647,6 +1814,7 @@ const Leave = () => {
 
                   </div>
 
+                  {/* LEAVE TYPE FROM DATABASE */}
 
                   <div className="leave-form-group">
 
@@ -1663,28 +1831,39 @@ const Leave = () => {
                         handleFormChange
                       }
                       required
+                      disabled={
+                        leaveTypes.length === 0
+                      }
                     >
 
-                      <option>
-                        Annual Leave
-                      </option>
+                      {leaveTypes.length === 0 ? (
 
-                      <option>
-                        Sick Leave
-                      </option>
+                        <option value="">
+                          No active leave types available
+                        </option>
 
-                      <option>
-                        Family Leave
-                      </option>
+                      ) : (
 
-                      <option>
-                        Other Leave
-                      </option>
+                        leaveTypes.map(
+                          (type) => (
+
+                            <option
+                              key={type.id}
+                              value={type.leave_type}
+                            >
+                              {type.leave_type}
+                            </option>
+
+                          )
+                        )
+
+                      )}
 
                     </select>
 
                   </div>
 
+                  {/* DATES */}
 
                   <div className="leave-form-row">
 
@@ -1708,7 +1887,6 @@ const Leave = () => {
 
                     </div>
 
-
                     <div className="leave-form-group">
 
                       <label>
@@ -1731,6 +1909,7 @@ const Leave = () => {
 
                   </div>
 
+                  {/* REASON */}
 
                   <div className="leave-form-group">
 
@@ -1754,6 +1933,7 @@ const Leave = () => {
 
                 </div>
 
+                {/* FOOTER */}
 
                 <div className="leave-add-footer">
 
@@ -1768,23 +1948,32 @@ const Leave = () => {
                     Cancel
                   </button>
 
-
                   <button
                     type="submit"
                     className="modal-action approve"
-                    disabled={saving}
+                    disabled={
+                      saving ||
+                      employees.length === 0 ||
+                      leaveTypes.length === 0
+                    }
                   >
+
                     {saving ? (
+
                       <>
                         <FaSyncAlt className="loading-icon" />
                         Saving...
                       </>
+
                     ) : (
+
                       <>
                         <FaCheck />
                         Create Leave
                       </>
+
                     )}
+
                   </button>
 
                 </div>

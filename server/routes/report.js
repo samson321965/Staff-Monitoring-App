@@ -5,20 +5,19 @@ const pool = require("../config/database");
 
 const {
     authenticateToken,
-    authorizeRoles,
+    authorizeRoles
 } = require("../middleware/authMiddleware");
 
 
-// ============================================================
-// HELPER FUNCTIONS
-// ============================================================
+// ======================================================
+// DATE VALIDATION
+// ======================================================
 
 const isValidDate = (value) => {
     if (!value || typeof value !== "string") {
         return false;
     }
 
-    // Require YYYY-MM-DD format
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
         return false;
     }
@@ -29,168 +28,176 @@ const isValidDate = (value) => {
 };
 
 
-const normalizeDepartment = (department) => {
-    if (!department || department === "all") {
-        return "all";
-    }
+// ======================================================
+// DEFAULT DATE RANGE
+// ======================================================
 
-    const value = String(department).trim().toLowerCase();
+const getDefaultDateRange = () => {
+    const today = new Date();
 
-    // Frontend may send "ict", while PostgreSQL department
-    // is currently named "IT".
-    if (value === "ict") {
-        return "IT";
-    }
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
 
-    return department;
+    const startDate = `${year}-${month}-01`;
+    const endDate = `${year}-${month}-${day}`;
+
+    return {
+        startDate,
+        endDate
+    };
 };
 
 
-// ============================================================
+// ======================================================
+// NORMALIZE SECTION
+// ======================================================
+
+const normalizeSection = (value) => {
+    if (!value || value === "all") {
+        return "all";
+    }
+
+    return String(value).trim();
+};
+
+
+// ======================================================
 // GET REPORT SUMMARY
-// GET /api/reports/summary
-// ============================================================
+// ======================================================
 
 router.get(
     "/summary",
+
     authenticateToken,
+
     authorizeRoles(
         "system_admin",
         "commission",
         "director",
         "deputy_director",
         "manager",
+        "ict_officer",
         "hr",
         "finance",
-        "compliance"
+        "compliance",
+        "officer"
     ),
+
     async (req, res) => {
+
         try {
 
-            // --------------------------------------------------------
-            // GET QUERY PARAMETERS
-            // --------------------------------------------------------
+            // ==================================================
+            // GET DATE PARAMETERS
+            // ==================================================
 
-            const {
+            let {
                 startDate,
                 endDate,
                 reportType = "all",
-                department: requestedDepartment = "all",
+                section = "all"
             } = req.query;
 
 
-            // --------------------------------------------------------
-            // DEFAULT DATE RANGE
-            //
-            // If frontend does not send dates, use current month.
-            // --------------------------------------------------------
+            // ==================================================
+            // DEFAULT DATES
+            // ==================================================
 
-            const now = new Date();
+            if (!startDate || !endDate) {
 
-            const defaultEndDate =
-                `${now.getFullYear()}-${String(
-                    now.getMonth() + 1
-                ).padStart(2, "0")}-${String(
-                    now.getDate()
-                ).padStart(2, "0")}`;
+                const defaults = getDefaultDateRange();
 
-            const defaultStartDate =
-                `${now.getFullYear()}-${String(
-                    now.getMonth() + 1
-                ).padStart(2, "0")}-01`;
+                startDate = defaults.startDate;
+                endDate = defaults.endDate;
+            }
 
 
-            const selectedStartDate =
-                startDate || defaultStartDate;
-
-            const selectedEndDate =
-                endDate || defaultEndDate;
-
-
-            // --------------------------------------------------------
+            // ==================================================
             // VALIDATE DATES
-            // --------------------------------------------------------
+            // ==================================================
 
-            if (
-                !isValidDate(selectedStartDate) ||
-                !isValidDate(selectedEndDate)
-            ) {
+            if (!isValidDate(startDate) || !isValidDate(endDate)) {
+
                 return res.status(400).json({
-                    message:
-                        "Invalid date format. Use YYYY-MM-DD.",
+                    message: "Invalid date format. Use YYYY-MM-DD."
                 });
             }
 
 
-            if (
-                selectedEndDate < selectedStartDate
-            ) {
+            if (startDate > endDate) {
+
                 return res.status(400).json({
-                    message:
-                        "End date cannot be before start date.",
+                    message: "Start date cannot be after end date."
                 });
             }
 
 
-            // --------------------------------------------------------
-            // NORMALIZE DEPARTMENT
-            // --------------------------------------------------------
-
-            const department =
-                normalizeDepartment(
-                    requestedDepartment
-                );
+            section = normalizeSection(section);
 
 
-            // --------------------------------------------------------
-            // DEPARTMENT FILTER
-            // --------------------------------------------------------
+            // ==================================================
+            // SECTION FILTER
+            //
+            // employees
+            //     ↓
+            // positions
+            //     ↓
+            // sections
+            // ==================================================
 
-            let departmentFilter = "";
+            let sectionFilter = "";
+            let sectionParams = [];
 
-            if (department !== "all") {
-                departmentFilter = `
-                    AND LOWER(d.department_name) = LOWER($3)
+            if (section !== "all") {
+
+                sectionFilter = `
+                    AND LOWER(s.section_name) = LOWER($3)
                 `;
+
+                sectionParams = [startDate, endDate, section];
+
+            } else {
+
+                sectionParams = [startDate, endDate];
             }
 
 
-            // ========================================================
+            // ==================================================
             // TOTAL EMPLOYEES
             //
-            // This is the total number of registered employees.
-            // It is intentionally NOT restricted by attendance dates.
-            // ========================================================
+            // IMPORTANT:
+            // employees does NOT contain department_id.
+            //
+            // We use:
+            // employees.position_id
+            // → positions.section_id
+            // → sections
+            // ==================================================
 
-            const totalEmployeesQuery = `
+            let totalEmployeesQuery = `
                 SELECT COUNT(*) AS total
-
                 FROM employees e
-
-                LEFT JOIN departments d
-                    ON e.department_id = d.id
-
-                WHERE 1 = 1
-
-                ${
-                    department !== "all"
-                        ? departmentFilter
-                        : ""
-                }
+                INNER JOIN positions p
+                    ON e.position_id = p.id
+                INNER JOIN sections s
+                    ON p.section_id = s.id
+                WHERE e.employment_status <> 'Terminated'
             `;
 
+            let totalEmployeesParams = [];
 
-            const totalEmployeesParams =
-                department !== "all"
-                    ? [
-                        selectedStartDate,
-                        selectedEndDate,
-                        department,
-                    ]
-                    : [];
+            if (section !== "all") {
+
+                totalEmployeesQuery += `
+                    AND LOWER(s.section_name) = LOWER($1)
+                `;
+
+                totalEmployeesParams = [section];
+            }
 
 
-            const totalResult =
+            const totalEmployeesResult =
                 await pool.query(
                     totalEmployeesQuery,
                     totalEmployeesParams
@@ -199,29 +206,27 @@ router.get(
 
             const totalEmployees =
                 Number(
-                    totalResult.rows[0]?.total || 0
+                    totalEmployeesResult.rows[0]?.total || 0
                 );
 
 
-            // ========================================================
+            // ==================================================
             // ATTENDANCE SUMMARY
-            //
-            // Uses selected calendar date range.
-            // ========================================================
+            // ==================================================
 
-            const attendanceQuery = `
+            let attendanceQuery = `
                 SELECT
 
                     COUNT(*) FILTER (
-                        WHERE LOWER(a.status) = 'present'
+                        WHERE LOWER(COALESCE(a.status, '')) = 'present'
                     ) AS present,
 
                     COUNT(*) FILTER (
-                        WHERE LOWER(a.status) = 'late'
+                        WHERE LOWER(COALESCE(a.status, '')) = 'late'
                     ) AS late,
 
                     COUNT(*) FILTER (
-                        WHERE LOWER(a.status) = 'absent'
+                        WHERE LOWER(COALESCE(a.status, '')) = 'absent'
                     ) AS absent
 
                 FROM attendance a
@@ -229,37 +234,28 @@ router.get(
                 INNER JOIN employees e
                     ON a.employee_id = e.id
 
-                LEFT JOIN departments d
-                    ON e.department_id = d.id
+                INNER JOIN positions p
+                    ON e.position_id = p.id
 
-                WHERE
-                    a.attendance_date BETWEEN $1 AND $2
+                INNER JOIN sections s
+                    ON p.section_id = s.id
 
-                ${
-                    department !== "all"
-                        ? "AND LOWER(d.department_name) = LOWER($3)"
-                        : ""
-                }
+                WHERE a.attendance_date BETWEEN $1 AND $2
             `;
 
 
-            const attendanceParams =
-                department !== "all"
-                    ? [
-                        selectedStartDate,
-                        selectedEndDate,
-                        department,
-                    ]
-                    : [
-                        selectedStartDate,
-                        selectedEndDate,
-                    ];
+            if (section !== "all") {
+
+                attendanceQuery += `
+                    AND LOWER(s.section_name) = LOWER($3)
+                `;
+            }
 
 
             const attendanceResult =
                 await pool.query(
                     attendanceQuery,
-                    attendanceParams
+                    sectionParams
                 );
 
 
@@ -268,56 +264,43 @@ router.get(
 
 
             const present =
-                Number(
-                    attendanceRow.present || 0
-                );
-
+                Number(attendanceRow.present || 0);
 
             const late =
-                Number(
-                    attendanceRow.late || 0
-                );
-
+                Number(attendanceRow.late || 0);
 
             const absent =
-                Number(
-                    attendanceRow.absent || 0
-                );
+                Number(attendanceRow.absent || 0);
 
 
-            // ========================================================
+            // ==================================================
             // LEAVE SUMMARY
             //
-            // Counts leave that overlaps the selected date range.
-            // ========================================================
+            // leave_requests:
+            // employee_id
+            // leave_type
+            // start_date
+            // end_date
+            // status
+            // ==================================================
 
-            const leaveQuery = `
+            let leaveQuery = `
                 SELECT
 
                     COUNT(*) FILTER (
-                        WHERE LOWER(lr.leave_type)
-                        LIKE '%sick%'
+                        WHERE LOWER(COALESCE(lr.leave_type, '')) LIKE '%sick%'
                     ) AS sick,
 
                     COUNT(*) FILTER (
-                        WHERE
-                            LOWER(lr.leave_type)
-                            LIKE '%family%'
-
-                            OR LOWER(lr.leave_type)
-                            LIKE '%personal%'
+                        WHERE LOWER(COALESCE(lr.leave_type, '')) LIKE '%family%'
+                        OR LOWER(COALESCE(lr.leave_type, '')) LIKE '%personal%'
                     ) AS family,
 
                     COUNT(*) FILTER (
                         WHERE
-                            LOWER(lr.leave_type)
-                            NOT LIKE '%sick%'
-
-                            AND LOWER(lr.leave_type)
-                            NOT LIKE '%family%'
-
-                            AND LOWER(lr.leave_type)
-                            NOT LIKE '%personal%'
+                            LOWER(COALESCE(lr.leave_type, '')) NOT LIKE '%sick%'
+                            AND LOWER(COALESCE(lr.leave_type, '')) NOT LIKE '%family%'
+                            AND LOWER(COALESCE(lr.leave_type, '')) NOT LIKE '%personal%'
                     ) AS other,
 
                     COUNT(*) AS total
@@ -327,45 +310,35 @@ router.get(
                 INNER JOIN employees e
                     ON lr.employee_id = e.id
 
-                LEFT JOIN departments d
-                    ON e.department_id = d.id
+                INNER JOIN positions p
+                    ON e.position_id = p.id
+
+                INNER JOIN sections s
+                    ON p.section_id = s.id
 
                 WHERE
-
                     lr.start_date <= $2
-
                     AND lr.end_date >= $1
 
-                    AND LOWER(lr.status) IN (
+                    AND LOWER(COALESCE(lr.status, '')) IN (
                         'approved',
                         'pending'
                     )
-
-                    ${
-                        department !== "all"
-                            ? "AND LOWER(d.department_name) = LOWER($3)"
-                            : ""
-                    }
             `;
 
 
-            const leaveParams =
-                department !== "all"
-                    ? [
-                        selectedStartDate,
-                        selectedEndDate,
-                        department,
-                    ]
-                    : [
-                        selectedStartDate,
-                        selectedEndDate,
-                    ];
+            if (section !== "all") {
+
+                leaveQuery += `
+                    AND LOWER(s.section_name) = LOWER($3)
+                `;
+            }
 
 
             const leaveResult =
                 await pool.query(
                     leaveQuery,
-                    leaveParams
+                    sectionParams
                 );
 
 
@@ -374,50 +347,37 @@ router.get(
 
 
             const sick =
-                Number(
-                    leaveRow.sick || 0
-                );
-
+                Number(leaveRow.sick || 0);
 
             const family =
-                Number(
-                    leaveRow.family || 0
-                );
-
+                Number(leaveRow.family || 0);
 
             const other =
-                Number(
-                    leaveRow.other || 0
-                );
-
+                Number(leaveRow.other || 0);
 
             const totalLeave =
-                Number(
-                    leaveRow.total || 0
-                );
+                Number(leaveRow.total || 0);
 
 
-            // ========================================================
-            // DAILY ATTENDANCE TREND
-            //
-            // Uses selected calendar date range.
-            // ========================================================
+            // ==================================================
+            // ATTENDANCE TREND
+            // ==================================================
 
-            const trendQuery = `
+            let trendQuery = `
                 SELECT
 
                     a.attendance_date AS date,
 
                     COUNT(*) FILTER (
-                        WHERE LOWER(a.status) = 'present'
+                        WHERE LOWER(COALESCE(a.status, '')) = 'present'
                     ) AS present,
 
                     COUNT(*) FILTER (
-                        WHERE LOWER(a.status) = 'late'
+                        WHERE LOWER(COALESCE(a.status, '')) = 'late'
                     ) AS late,
 
                     COUNT(*) FILTER (
-                        WHERE LOWER(a.status) = 'absent'
+                        WHERE LOWER(COALESCE(a.status, '')) = 'absent'
                     ) AS absent
 
                 FROM attendance a
@@ -425,72 +385,51 @@ router.get(
                 INNER JOIN employees e
                     ON a.employee_id = e.id
 
-                LEFT JOIN departments d
-                    ON e.department_id = d.id
+                INNER JOIN positions p
+                    ON e.position_id = p.id
 
-                WHERE
-                    a.attendance_date BETWEEN $1 AND $2
+                INNER JOIN sections s
+                    ON p.section_id = s.id
 
-                ${
-                    department !== "all"
-                        ? "AND LOWER(d.department_name) = LOWER($3)"
-                        : ""
-                }
+                WHERE a.attendance_date BETWEEN $1 AND $2
+            `;
 
-                GROUP BY
-                    a.attendance_date
 
-                ORDER BY
-                    a.attendance_date ASC
+            if (section !== "all") {
+
+                trendQuery += `
+                    AND LOWER(s.section_name) = LOWER($3)
+                `;
+            }
+
+
+            trendQuery += `
+                GROUP BY a.attendance_date
+                ORDER BY a.attendance_date ASC
             `;
 
 
             const trendResult =
                 await pool.query(
                     trendQuery,
-                    attendanceParams
+                    sectionParams
                 );
 
 
             const attendanceTrend =
-                trendResult.rows.map(
-                    (row) => ({
-                        date: row.date,
-
-                        present:
-                            Number(
-                                row.present || 0
-                            ),
-
-                        late:
-                            Number(
-                                row.late || 0
-                            ),
-
-                        absent:
-                            Number(
-                                row.absent || 0
-                            ),
-                    })
-                );
+                trendResult.rows.map(row => ({
+                    date: row.date,
+                    present: Number(row.present || 0),
+                    late: Number(row.late || 0),
+                    absent: Number(row.absent || 0)
+                }));
 
 
-            // ========================================================
-            // EMPLOYEES ON LEAVE DURING SELECTED DATE RANGE
-            //
-            // IMPORTANT:
-            // Previously this used CURRENT_DATE.
-            //
-            // Now it uses the calendar-selected date range.
-            //
-            // A leave is counted when it overlaps the selected range:
-            //
-            // leave.start <= selected.end
-            // AND
-            // leave.end >= selected.start
-            // ========================================================
+            // ==================================================
+            // CURRENTLY ON LEAVE
+            // ==================================================
 
-            const onLeaveQuery = `
+            let onLeaveQuery = `
                 SELECT COUNT(*) AS total
 
                 FROM leave_requests lr
@@ -498,42 +437,33 @@ router.get(
                 INNER JOIN employees e
                     ON lr.employee_id = e.id
 
-                LEFT JOIN departments d
-                    ON e.department_id = d.id
+                INNER JOIN positions p
+                    ON e.position_id = p.id
+
+                INNER JOIN sections s
+                    ON p.section_id = s.id
 
                 WHERE
 
                     lr.start_date <= $2
-
                     AND lr.end_date >= $1
 
-                    AND LOWER(lr.status) = 'approved'
-
-                    ${
-                        department !== "all"
-                            ? "AND LOWER(d.department_name) = LOWER($3)"
-                            : ""
-                    }
+                    AND LOWER(COALESCE(lr.status, '')) = 'approved'
             `;
 
 
-            const onLeaveParams =
-                department !== "all"
-                    ? [
-                        selectedStartDate,
-                        selectedEndDate,
-                        department,
-                    ]
-                    : [
-                        selectedStartDate,
-                        selectedEndDate,
-                    ];
+            if (section !== "all") {
+
+                onLeaveQuery += `
+                    AND LOWER(s.section_name) = LOWER($3)
+                `;
+            }
 
 
             const onLeaveResult =
                 await pool.query(
                     onLeaveQuery,
-                    onLeaveParams
+                    sectionParams
                 );
 
 
@@ -543,325 +473,12 @@ router.get(
                 );
 
 
-            // ========================================================
-            // RECENT REPORTS
+            // ==================================================
+            // REPORTS TABLE
             //
-            // We now store start_date and end_date in the reports
-            // table so generated reports can also be filtered by
-            // the calendar range.
-            // ========================================================
-
-            let recentReports = [];
-
-
-            try {
-
-                // ----------------------------------------------------
-                // CREATE REPORTS TABLE IF IT DOES NOT EXIST
-                // ----------------------------------------------------
-
-                await pool.query(`
-                    CREATE TABLE IF NOT EXISTS reports (
-
-                        id SERIAL PRIMARY KEY,
-
-                        name VARCHAR(255) NOT NULL,
-
-                        type VARCHAR(50) NOT NULL,
-
-                        generated_at TIMESTAMP
-                            DEFAULT CURRENT_TIMESTAMP,
-
-                        generated_by VARCHAR(255)
-                            DEFAULT 'System',
-
-                        format VARCHAR(20)
-                            DEFAULT 'PDF',
-
-                        url TEXT,
-
-                        start_date DATE,
-
-                        end_date DATE
-                    )
-                `);
-
-
-                // ----------------------------------------------------
-                // SAFELY ADD DATE COLUMNS TO EXISTING TABLE
-                //
-                // This does NOT delete existing records.
-                // ----------------------------------------------------
-
-                await pool.query(`
-                    ALTER TABLE reports
-                    ADD COLUMN IF NOT EXISTS start_date DATE
-                `);
-
-
-                await pool.query(`
-                    ALTER TABLE reports
-                    ADD COLUMN IF NOT EXISTS end_date DATE
-                `);
-
-
-                // ----------------------------------------------------
-                // GET REPORTS THAT OVERLAP SELECTED DATE RANGE
-                //
-                // Reports with no date information are also included
-                // so old report records are not lost.
-                // ----------------------------------------------------
-
-                const reportsResult =
-                    await pool.query(
-                        `
-                        SELECT
-
-                            id,
-                            name,
-                            type,
-                            generated_at,
-                            generated_by,
-                            format,
-                            url,
-                            start_date,
-                            end_date
-
-                        FROM reports
-
-                        WHERE
-
-                            (
-                                start_date IS NULL
-                                OR end_date IS NULL
-                            )
-
-                            OR
-                            (
-                                start_date <= $2
-                                AND end_date >= $1
-                            )
-
-                        ORDER BY
-                            generated_at DESC
-
-                        LIMIT 10
-                        `,
-                        [
-                            selectedStartDate,
-                            selectedEndDate,
-                        ]
-                    );
-
-
-                recentReports =
-                    reportsResult.rows.map(
-                        (report) => ({
-                            id:
-                                report.id,
-
-                            name:
-                                report.name,
-
-                            type:
-                                report.type,
-
-                            date:
-                                report.generated_at
-                                    ? new Date(
-                                        report.generated_at
-                                    ).toLocaleDateString(
-                                        "en-GB",
-                                        {
-                                            day: "2-digit",
-                                            month: "short",
-                                            year: "numeric",
-                                        }
-                                    )
-                                    : "",
-
-                            generatedBy:
-                                report.generated_by ||
-                                "System",
-
-                            format:
-                                report.format ||
-                                "PDF",
-
-                            url:
-                                report.url ||
-                                "#",
-
-                            startDate:
-                                report.start_date
-                                    ? report.start_date
-                                    : null,
-
-                            endDate:
-                                report.end_date
-                                    ? report.end_date
-                                    : null,
-                        })
-                    );
-
-            } catch (reportError) {
-
-                console.log(
-                    "Reports table query error:",
-                    reportError.message
-                );
-
-                recentReports = [];
-            }
-
-
-            // ========================================================
-            // RESPONSE
-            // ========================================================
-
-            res.status(200).json({
-
-                // Return the selected range so frontend can confirm
-                // exactly what the server filtered.
-                dateRange: {
-                    startDate:
-                        selectedStartDate,
-
-                    endDate:
-                        selectedEndDate,
-                },
-
-                summary: {
-
-                    totalEmployees,
-
-                    present,
-
-                    onLeave,
-
-                    absent,
-
-                    late,
-                },
-
-
-                attendanceTrend,
-
-
-                leaveSummary: {
-
-                    sick,
-
-                    family,
-
-                    other,
-
-                    total:
-                        totalLeave,
-                },
-
-
-                recentReports,
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Reports summary error:",
-                error
-            );
-
-
-            res.status(500).json({
-
-                message:
-                    "Unable to load report summary.",
-
-                error:
-                    error.message,
-            });
-        }
-    }
-);
-
-
-// ============================================================
-// GENERATE REPORT
-// POST /api/reports/generate
-// ============================================================
-
-router.post(
-    "/generate",
-    authenticateToken,
-    authorizeRoles(
-        "system_admin",
-        "director",
-        "deputy_director",
-        "manager",
-        "hr",
-        "finance"
-    ),
-    async (req, res) => {
-
-        try {
-
-            const {
-                startDate,
-                endDate,
-                reportType = "all",
-                department: requestedDepartment = "all",
-            } = req.body;
-
-
-            // --------------------------------------------------------
-            // VALIDATION
-            // --------------------------------------------------------
-
-            if (!startDate || !endDate) {
-
-                return res.status(400).json({
-                    message:
-                        "Start date and end date are required.",
-                });
-            }
-
-
-            if (
-                !isValidDate(startDate) ||
-                !isValidDate(endDate)
-            ) {
-
-                return res.status(400).json({
-                    message:
-                        "Invalid date format. Use YYYY-MM-DD.",
-                });
-            }
-
-
-            if (
-                endDate < startDate
-            ) {
-
-                return res.status(400).json({
-                    message:
-                        "End date cannot be before start date.",
-                });
-            }
-
-
-            // --------------------------------------------------------
-            // NORMALIZE DEPARTMENT
-            // --------------------------------------------------------
-
-            const department =
-                normalizeDepartment(
-                    requestedDepartment
-                );
-
-
-            // --------------------------------------------------------
-            // CREATE REPORTS TABLE IF IT DOES NOT EXIST
-            // --------------------------------------------------------
+            // Create only if it does not already exist.
+            // No existing data is dropped.
+            // ==================================================
 
             await pool.query(`
                 CREATE TABLE IF NOT EXISTS reports (
@@ -890,15 +507,14 @@ router.post(
             `);
 
 
-            // --------------------------------------------------------
-            // SAFELY ADD DATE COLUMNS TO EXISTING TABLE
-            // --------------------------------------------------------
+            // ==================================================
+            // MAKE SURE REPORT DATE COLUMNS EXIST
+            // ==================================================
 
             await pool.query(`
                 ALTER TABLE reports
                 ADD COLUMN IF NOT EXISTS start_date DATE
             `);
-
 
             await pool.query(`
                 ALTER TABLE reports
@@ -906,24 +522,321 @@ router.post(
             `);
 
 
-            // --------------------------------------------------------
+            // ==================================================
+            // RECENT REPORTS
+            // ==================================================
+
+            const recentReportsResult =
+                await pool.query(
+                    `
+                    SELECT
+
+                        id,
+
+                        name,
+
+                        type,
+
+                        generated_at,
+
+                        generated_by,
+
+                        format,
+
+                        url,
+
+                        start_date,
+
+                        end_date
+
+                    FROM reports
+
+                    WHERE
+
+                        (
+                            start_date IS NULL
+                            OR end_date IS NULL
+                        )
+
+                        OR
+
+                        (
+                            start_date <= $2
+                            AND end_date >= $1
+                        )
+
+                    ORDER BY generated_at DESC
+
+                    LIMIT 10
+                    `,
+                    [startDate, endDate]
+                );
+
+
+            const recentReports =
+                recentReportsResult.rows.map(report => ({
+                    id: report.id,
+                    name: report.name,
+                    type: report.type,
+                    generatedAt: report.generated_at,
+                    generatedBy: report.generated_by,
+                    format: report.format,
+                    url: report.url,
+                    startDate: report.start_date,
+                    endDate: report.end_date
+                }));
+
+
+            // ==================================================
+            // RESPONSE
+            // ==================================================
+
+            return res.json({
+
+                dateRange: {
+                    startDate,
+                    endDate
+                },
+
+                reportType,
+
+                section,
+
+                summary: {
+
+                    totalEmployees,
+
+                    present,
+
+                    onLeave,
+
+                    absent,
+
+                    late
+                },
+
+                attendanceTrend,
+
+                leaveSummary: {
+
+                    sick,
+
+                    family,
+
+                    other,
+
+                    total: totalLeave
+                },
+
+                recentReports
+            });
+
+
+        } catch (error) {
+
+            console.error(
+                "REPORT SUMMARY ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+
+                message: "Unable to load report data.",
+
+                error:
+                    process.env.NODE_ENV === "development"
+                        ? error.message
+                        : undefined
+            });
+        }
+    }
+);
+
+
+// ======================================================
+// GENERATE REPORT
+// ======================================================
+
+router.post(
+    "/generate",
+
+    authenticateToken,
+
+    authorizeRoles(
+        "system_admin",
+        "commission",
+        "director",
+        "deputy_director",
+        "manager",
+        "ict_officer",
+        "hr",
+        "finance",
+        "compliance",
+        "officer"
+    ),
+
+    async (req, res) => {
+
+        try {
+
+            let {
+                startDate,
+                endDate,
+                reportType = "all",
+                section = "all"
+            } = req.body;
+
+
+            // ==================================================
+            // DEFAULT DATE RANGE
+            // ==================================================
+
+            if (!startDate || !endDate) {
+
+                const defaults =
+                    getDefaultDateRange();
+
+                startDate =
+                    startDate || defaults.startDate;
+
+                endDate =
+                    endDate || defaults.endDate;
+            }
+
+
+            // ==================================================
+            // VALIDATE
+            // ==================================================
+
+            if (
+                !isValidDate(startDate) ||
+                !isValidDate(endDate)
+            ) {
+
+                return res.status(400).json({
+
+                    message:
+                        "Invalid date format. Use YYYY-MM-DD."
+                });
+            }
+
+
+            if (startDate > endDate) {
+
+                return res.status(400).json({
+
+                    message:
+                        "Start date cannot be after end date."
+                });
+            }
+
+
+            // ==================================================
+            // CREATE REPORT TABLE IF REQUIRED
+            // ==================================================
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS reports (
+
+                    id SERIAL PRIMARY KEY,
+
+                    name VARCHAR(255) NOT NULL,
+
+                    type VARCHAR(50) NOT NULL,
+
+                    generated_at TIMESTAMP
+                        DEFAULT CURRENT_TIMESTAMP,
+
+                    generated_by VARCHAR(255)
+                        DEFAULT 'System',
+
+                    format VARCHAR(20)
+                        DEFAULT 'PDF',
+
+                    url TEXT,
+
+                    start_date DATE,
+
+                    end_date DATE
+                )
+            `);
+
+
+            // ==================================================
+            // ADD MISSING COLUMNS
+            // ==================================================
+
+            await pool.query(`
+                ALTER TABLE reports
+                ADD COLUMN IF NOT EXISTS generated_by VARCHAR(255)
+            `);
+
+            await pool.query(`
+                ALTER TABLE reports
+                ADD COLUMN IF NOT EXISTS format VARCHAR(20)
+            `);
+
+            await pool.query(`
+                ALTER TABLE reports
+                ADD COLUMN IF NOT EXISTS url TEXT
+            `);
+
+            await pool.query(`
+                ALTER TABLE reports
+                ADD COLUMN IF NOT EXISTS start_date DATE
+            `);
+
+            await pool.query(`
+                ALTER TABLE reports
+                ADD COLUMN IF NOT EXISTS end_date DATE
+            `);
+
+
+            // ==================================================
+            // FORMAT REPORT TYPE
+            // ==================================================
+
+            let formattedReportType = "Attendance";
+
+            if (reportType === "leave") {
+
+                formattedReportType = "Leave";
+
+            } else if (reportType === "attendance") {
+
+                formattedReportType = "Attendance";
+
+            } else if (reportType === "employee") {
+
+                formattedReportType = "Employee";
+
+            } else if (reportType === "all") {
+
+                formattedReportType = "Staff";
+            }
+
+
+            // ==================================================
             // REPORT NAME
-            // --------------------------------------------------------
-
-            const formattedReportType =
-                reportType === "all"
-                    ? "Staff Monitoring"
-                    : reportType.charAt(0).toUpperCase() +
-                      reportType.slice(1);
-
+            // ==================================================
 
             const reportName =
                 `${formattedReportType} Report ${startDate} to ${endDate}`;
 
 
-            // --------------------------------------------------------
-            // SAVE REPORT RECORD
-            // --------------------------------------------------------
+            // ==================================================
+            // GENERATED BY
+            // ==================================================
+
+            const generatedBy =
+                req.user?.email ||
+                req.user?.username ||
+                "System";
+
+
+            // ==================================================
+            // INSERT REPORT
+            // ==================================================
 
             const result =
                 await pool.query(
@@ -953,16 +866,13 @@ router.post(
                     RETURNING *
                     `,
                     [
-
                         reportName,
 
                         reportType === "all"
                             ? "Attendance"
                             : formattedReportType,
 
-                        req.user.email ||
-                            req.user.username ||
-                            "System",
+                        generatedBy,
 
                         "PDF",
 
@@ -970,63 +880,52 @@ router.post(
 
                         startDate,
 
-                        endDate,
+                        endDate
                     ]
                 );
 
 
-            // --------------------------------------------------------
-            // RESPONSE
-            // --------------------------------------------------------
-
-            res.status(201).json({
+            return res.status(201).json({
 
                 message:
                     "Report generated successfully.",
 
                 report:
-                    result.rows[0],
-
-                dateRange: {
-                    startDate,
-
-                    endDate,
-                },
-
-                department,
-
-                reportType,
+                    result.rows[0]
             });
+
 
         } catch (error) {
 
             console.error(
-                "Generate report error:",
+                "REPORT GENERATE ERROR:",
                 error
             );
 
-
-            res.status(500).json({
+            return res.status(500).json({
 
                 message:
                     "Unable to generate report.",
 
                 error:
-                    error.message,
+                    process.env.NODE_ENV === "development"
+                        ? error.message
+                        : undefined
             });
         }
     }
 );
 
 
-// ============================================================
+// ======================================================
 // DOWNLOAD REPORT
-// GET /api/reports/:id/download
-// ============================================================
+// ======================================================
 
 router.get(
     "/:id/download",
+
     authenticateToken,
+
     authorizeRoles(
         "system_admin",
         "director",
@@ -1035,37 +934,42 @@ router.get(
         "hr",
         "finance"
     ),
+
     async (req, res) => {
 
         try {
 
-            const { id } = req.params;
+            const reportId =
+                Number(req.params.id);
 
 
-            // --------------------------------------------------------
-            // GET REPORT
-            // --------------------------------------------------------
+            if (!Number.isInteger(reportId)) {
+
+                return res.status(400).json({
+
+                    message:
+                        "Invalid report ID."
+                });
+            }
+
 
             const result =
                 await pool.query(
                     `
                     SELECT *
-
                     FROM reports
-
                     WHERE id = $1
                     `,
-                    [id]
+                    [reportId]
                 );
 
 
-            if (
-                result.rows.length === 0
-            ) {
+            if (result.rows.length === 0) {
 
                 return res.status(404).json({
+
                     message:
-                        "Report not found.",
+                        "Report not found."
                 });
             }
 
@@ -1074,27 +978,32 @@ router.get(
                 result.rows[0];
 
 
-            // --------------------------------------------------------
+            // ==================================================
             // TEMPORARY TEXT REPORT
-            //
-            // Later this can be replaced with a real PDF/XLSX
-            // generator.
-            // --------------------------------------------------------
+            // ==================================================
 
-            const reportContent = `
+            const content = `
+
+VANUATU ELECTORAL OFFICE
 STAFF MONITORING SYSTEM
-=======================
+========================================
 
 Report: ${report.name}
-Type: ${report.type}
+
+Report Type: ${report.type}
+
+Generated By: ${report.generated_by || "System"}
+
+Generated At: ${report.generated_at || ""}
 
 Date Range:
-${report.start_date || "Not specified"} to ${report.end_date || "Not specified"}
+${report.start_date || ""} to ${report.end_date || ""}
 
-Generated By: ${report.generated_by}
-Generated At: ${report.generated_at}
+========================================
 
-This report was generated by the Staff Monitoring System.
+This report was generated by the
+Staff Monitoring System.
+
 `;
 
 
@@ -1103,40 +1012,30 @@ This report was generated by the Staff Monitoring System.
                 "text/plain"
             );
 
-
             res.setHeader(
                 "Content-Disposition",
-                `attachment; filename="${report.name}.txt"`
+                `attachment; filename="report-${report.id}.txt"`
             );
 
 
-            res.send(
-                reportContent
-            );
+            return res.send(content);
+
 
         } catch (error) {
 
             console.error(
-                "Download report error:",
+                "REPORT DOWNLOAD ERROR:",
                 error
             );
 
-
-            res.status(500).json({
+            return res.status(500).json({
 
                 message:
-                    "Unable to download report.",
-
-                error:
-                    error.message,
+                    "Unable to download report."
             });
         }
     }
 );
 
-
-// ============================================================
-// EXPORT ROUTER
-// ============================================================
 
 module.exports = router;

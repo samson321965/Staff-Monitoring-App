@@ -134,7 +134,7 @@ const Reports = () => {
         startDate: selectedRange.startDate,
         endDate: selectedRange.endDate,
         reportType,
-        department,
+        section: department,
       });
 
       const requestUrl =
@@ -435,7 +435,7 @@ const Reports = () => {
             startDate: dateRange.startDate,
             endDate: dateRange.endDate,
             reportType,
-            department,
+            section: department,
           }),
         }
       );
