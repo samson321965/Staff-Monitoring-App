@@ -21,10 +21,16 @@ import Sidebar from "../components/Sidebar";
 import logo from "../assets/images/logo.png";
 
 import "../styles/Reports.css";
-import { buildApiUrl } from "../config/api";
+import { API_BASE_URL } from "../config/api";
 import { getAuthHeaders } from "../utils/auth";
 
-const API_URL = buildApiUrl();
+// API_BASE_URL already contains:
+// http://localhost:5000/api
+//
+// Therefore, do NOT add another "/" after API_BASE_URL
+// when building the request URL.
+const API_URL = API_BASE_URL.replace(/\/+$/, "");
+
 
 const Reports = () => {
   /* =====================================================
@@ -137,6 +143,17 @@ const Reports = () => {
         section: department,
       });
 
+      /*
+       * IMPORTANT:
+       * API_URL is:
+       * http://localhost:5000/api
+       *
+       * So this creates:
+       * http://localhost:5000/api/reports/summary
+       *
+       * NOT:
+       * http://localhost:5000/api//reports/summary
+       */
       const requestUrl =
         `${API_URL}/reports/summary?${query.toString()}`;
 
@@ -461,27 +478,17 @@ const Reports = () => {
   const formatDate = (date) => {
     if (!date) return "";
 
-    /*
-     * Parse YYYY-MM-DD manually so JavaScript does not
-     * interpret it as UTC and move it backwards in Vanuatu.
-     */
-    const parts = date.split("-");
+    const d = new Date(date);
 
-    if (parts.length === 3) {
-      const year = Number(parts[0]);
-      const month = Number(parts[1]) - 1;
-      const day = Number(parts[2]);
-
-      const d = new Date(year, month, day);
-
-      return d.toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      });
+    if (Number.isNaN(d.getTime())) {
+      return date;
     }
 
-    return date;
+    return d.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
   };
 
   /* =====================================================
@@ -491,19 +498,9 @@ const Reports = () => {
   return (
     <div className="reports-page">
 
-      {/* =================================================
-          EXISTING SIDEBAR
-          ================================================= */}
-
       <Sidebar />
 
-      {/* =================================================
-          MAIN CONTENT
-          ================================================= */}
-
       <main className="reports-main">
-
-        {/* Watermark */}
 
         <img
           src={logo}
@@ -512,10 +509,6 @@ const Reports = () => {
         />
 
         <div className="reports-content">
-
-          {/* =================================================
-              HEADER
-              ================================================= */}
 
           <header className="reports-header">
 
@@ -536,10 +529,6 @@ const Reports = () => {
             </div>
 
             <div className="reports-header-actions">
-
-              {/* =================================================
-                  DATE RANGE BUTTON + CALENDAR POPUP
-                  ================================================= */}
 
               <div
                 className="date-picker-wrapper"
@@ -578,10 +567,6 @@ const Reports = () => {
 
                 </button>
 
-                {/* =================================================
-                    CALENDAR / DATE FILTER POPUP
-                    ================================================= */}
-
                 {showDatePicker && (
 
                   <div
@@ -603,8 +588,6 @@ const Reports = () => {
                     }}
                   >
 
-                    {/* Popup Header */}
-
                     <div
                       style={{
                         display: "flex",
@@ -615,6 +598,7 @@ const Reports = () => {
                     >
 
                       <div>
+
                         <h3
                           style={{
                             margin: 0,
@@ -634,6 +618,7 @@ const Reports = () => {
                         >
                           Choose the period for your report
                         </p>
+
                       </div>
 
                       <button
@@ -652,8 +637,6 @@ const Reports = () => {
                       </button>
 
                     </div>
-
-                    {/* Quick Filters */}
 
                     <div
                       style={{
@@ -726,8 +709,6 @@ const Reports = () => {
 
                     </div>
 
-                    {/* Start Date */}
-
                     <div
                       style={{
                         marginBottom: "14px",
@@ -771,8 +752,6 @@ const Reports = () => {
                       />
 
                     </div>
-
-                    {/* End Date */}
 
                     <div
                       style={{
@@ -818,8 +797,6 @@ const Reports = () => {
 
                     </div>
 
-                    {/* Selected Range */}
-
                     <div
                       style={{
                         background: "#f5f8fc",
@@ -841,8 +818,6 @@ const Reports = () => {
                         draftDateRange.endDate
                       )}
                     </div>
-
-                    {/* Popup Buttons */}
 
                     <div
                       style={{
@@ -896,29 +871,21 @@ const Reports = () => {
                     </div>
 
                   </div>
-
                 )}
 
               </div>
-
-              {/* Export Button */}
 
               <button
                 className="export-button"
                 onClick={generateReport}
               >
                 <FiDownload />
-
                 Export Report
               </button>
 
             </div>
 
           </header>
-
-          {/* =================================================
-              ERROR
-              ================================================= */}
 
           {error && (
             <div className="reports-error">
@@ -935,13 +902,7 @@ const Reports = () => {
             </div>
           )}
 
-          {/* =================================================
-              SUMMARY CARDS
-              ================================================= */}
-
           <section className="report-summary-cards">
-
-            {/* Total Employees */}
 
             <div className="report-summary-card employees">
 
@@ -967,8 +928,6 @@ const Reports = () => {
 
             </div>
 
-            {/* Present */}
-
             <div className="report-summary-card present">
 
               <div className="summary-card-icon">
@@ -992,8 +951,6 @@ const Reports = () => {
               <FiUserCheck className="summary-bg-icon" />
 
             </div>
-
-            {/* Leave */}
 
             <div className="report-summary-card leave">
 
@@ -1026,8 +983,6 @@ const Reports = () => {
 
             </div>
 
-            {/* Absent */}
-
             <div className="report-summary-card absent">
 
               <div className="summary-card-icon">
@@ -1054,10 +1009,6 @@ const Reports = () => {
 
           </section>
 
-          {/* =================================================
-              TABS
-              ================================================= */}
-
           <div className="report-tabs">
 
             <button className="tab active">
@@ -1082,15 +1033,7 @@ const Reports = () => {
 
           </div>
 
-          {/* =================================================
-              REPORT GRID
-              ================================================= */}
-
           <section className="reports-grid">
-
-            {/* =================================================
-                ATTENDANCE OVERVIEW
-                ================================================= */}
 
             <div className="report-panel attendance-panel">
 
@@ -1209,10 +1152,6 @@ const Reports = () => {
               </div>
 
             </div>
-
-            {/* =================================================
-                ATTENDANCE TREND
-                ================================================= */}
 
             <div className="report-panel trend-panel">
 
@@ -1367,13 +1306,7 @@ const Reports = () => {
 
             </div>
 
-            {/* =================================================
-                RIGHT COLUMN
-                ================================================= */}
-
             <div className="reports-right-column">
-
-              {/* Leave Overview */}
 
               <div className="report-panel leave-panel">
 
@@ -1476,8 +1409,6 @@ const Reports = () => {
 
               </div>
 
-              {/* Reports Summary */}
-
               <div className="report-panel reports-summary-panel">
 
                 <h2>
@@ -1502,6 +1433,7 @@ const Reports = () => {
                         ).length
                       }
                     </strong>
+
                   </div>
 
                   <div>
@@ -1519,6 +1451,7 @@ const Reports = () => {
                         ).length
                       }
                     </strong>
+
                   </div>
 
                   <div>
@@ -1537,6 +1470,7 @@ const Reports = () => {
                         ).length
                       }
                     </strong>
+
                   </div>
 
                   <div>
@@ -1555,6 +1489,7 @@ const Reports = () => {
                         ).length
                       }
                     </strong>
+
                   </div>
 
                 </div>
@@ -1565,13 +1500,7 @@ const Reports = () => {
 
           </section>
 
-          {/* =================================================
-              BOTTOM
-              ================================================= */}
-
           <section className="reports-bottom-grid">
-
-            {/* Recent Reports */}
 
             <div className="report-panel recent-reports-panel">
 
@@ -1767,8 +1696,6 @@ const Reports = () => {
 
             </div>
 
-            {/* Filter */}
-
             <div className="report-panel filter-panel">
 
               <h2>
@@ -1851,10 +1778,6 @@ const Reports = () => {
 
               </div>
 
-              {/* =================================================
-                  LOWER START DATE
-                  ================================================= */}
-
               <div className="filter-group">
 
                 <label>
@@ -1883,10 +1806,6 @@ const Reports = () => {
                 />
 
               </div>
-
-              {/* =================================================
-                  LOWER END DATE
-                  ================================================= */}
 
               <div className="filter-group">
 
