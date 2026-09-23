@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import {
   FiSettings,
@@ -26,12 +26,15 @@ import {
   FiUpload,
   FiTrash2,
   FiDollarSign,
-  FiLanguages,
   FiRefreshCw,
   FiUsers,
   FiList,
   FiHelpCircle,
   FiActivity,
+  FiPlus,
+  FiDownload,
+  FiMail,
+  FiExternalLink,
 } from "react-icons/fi";
 
 import Sidebar from "../components/Sidebar";
@@ -99,6 +102,94 @@ const Settings = () => {
      ===================================================== */
 
   const [activeTab, setActiveTab] = useState("general");
+
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const [brightMode, setBrightMode] = useState(() =>
+    localStorage.getItem("settings-bright-mode") === "true"
+  );
+
+  const [logoPreview, setLogoPreview] = useState(() =>
+    localStorage.getItem("settings-logo") || logo
+  );
+
+  const logoInputRef = useRef(null);
+  const backupInputRef = useRef(null);
+
+  const [attendanceSettings, setAttendanceSettings] = useState(() => {
+    try {
+      const savedSettings = JSON.parse(
+        localStorage.getItem("settings-attendance") || "null"
+      );
+
+      return {
+        startTime: savedSettings?.startTime || "08:00",
+        endTime: savedSettings?.endTime || "16:30",
+        statuses: {
+          present: savedSettings?.statuses?.present ?? true,
+          late: savedSettings?.statuses?.late ?? true,
+          absent: savedSettings?.statuses?.absent ?? true,
+        },
+      };
+    } catch {
+      return {
+        startTime: "08:00",
+        endTime: "16:30",
+        statuses: { present: true, late: true, absent: true },
+      };
+    }
+  });
+
+  const [leaveSettings, setLeaveSettings] = useState(() => {
+    try {
+      const savedSettings = JSON.parse(
+        localStorage.getItem("settings-leave") || "null"
+      );
+
+      return {
+        annual: savedSettings?.annual ?? true,
+        medical: savedSettings?.medical ?? true,
+        other: savedSettings?.other ?? true,
+      };
+    } catch {
+      return { annual: true, medical: true, other: true };
+    }
+  });
+
+  const [backupMessage, setBackupMessage] = useState("");
+
+  const [administrationView, setAdministrationView] = useState("users");
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminRoles, setAdminRoles] = useState([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [newUser, setNewUser] = useState({
+    username: "",
+    email: "",
+    password: "",
+    roleId: "",
+    employeeId: "",
+  });
+
+  const [notificationSettings, setNotificationSettings] = useState(() => {
+    try {
+      const savedSettings = JSON.parse(
+        localStorage.getItem("settings-notifications") || "null"
+      );
+
+      return {
+        system: savedSettings?.system ?? true,
+        leave: savedSettings?.leave ?? true,
+        attendance: savedSettings?.attendance ?? true,
+      };
+    } catch {
+      return {
+        system: true,
+        leave: true,
+        attendance: true,
+      };
+    }
+  });
 
 
   /* =====================================================
@@ -168,6 +259,34 @@ const Settings = () => {
 
     }
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("settings-bright-mode", String(brightMode));
+  }, [brightMode]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "settings-notifications",
+      JSON.stringify(notificationSettings)
+    );
+  }, [notificationSettings]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "settings-attendance",
+      JSON.stringify(attendanceSettings)
+    );
+  }, [attendanceSettings]);
+
+  useEffect(() => {
+    localStorage.setItem("settings-leave", JSON.stringify(leaveSettings));
+  }, [leaveSettings]);
+
+  useEffect(() => {
+    if (activeTab === "system") {
+      loadAdministrationData();
+    }
+  }, [activeTab]);
 
 
   /* =====================================================
@@ -397,6 +516,199 @@ const Settings = () => {
     setErrorMessage("");
   };
 
+  const toggleNotification = (setting) => {
+    setNotificationSettings((current) => ({
+      ...current,
+      [setting]: !current[setting],
+    }));
+  };
+
+  const updateAttendanceTime = (field, value) => {
+    setAttendanceSettings((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const toggleAttendanceStatus = (status) => {
+    setAttendanceSettings((current) => ({
+      ...current,
+      statuses: {
+        ...current.statuses,
+        [status]: !current.statuses[status],
+      },
+    }));
+  };
+
+  const toggleLeaveSetting = (setting) => {
+    setLeaveSettings((current) => ({
+      ...current,
+      [setting]: !current[setting],
+    }));
+  };
+
+  const createSettingsBackup = () => {
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      generalSettings,
+      workingDays,
+      notificationSettings,
+      attendanceSettings,
+      leaveSettings,
+      brightMode,
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `staff-monitor-settings-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setBackupMessage("Settings backup downloaded.");
+  };
+
+  const restoreSettingsBackup = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const backup = JSON.parse(String(reader.result));
+        if (backup.generalSettings) setGeneralSettings(backup.generalSettings);
+        if (backup.workingDays) setWorkingDays(backup.workingDays);
+        if (backup.notificationSettings) setNotificationSettings(backup.notificationSettings);
+        if (backup.attendanceSettings) setAttendanceSettings(backup.attendanceSettings);
+        if (backup.leaveSettings) setLeaveSettings(backup.leaveSettings);
+        if (typeof backup.brightMode === "boolean") setBrightMode(backup.brightMode);
+        setBackupMessage("Settings restored successfully.");
+      } catch {
+        setBackupMessage("That backup file is not valid.");
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = "";
+  };
+
+  const loadAdministrationData = async () => {
+    try {
+      setAdminLoading(true);
+      const headers = getAuthHeaders();
+      const [usersResponse, rolesResponse] = await Promise.all([
+        fetch(buildApiUrl("/administration/users"), { headers }),
+        fetch(buildApiUrl("/administration/access-control"), { headers }),
+      ]);
+
+      const usersData = await usersResponse.json();
+      const rolesData = await rolesResponse.json();
+
+      if (!usersResponse.ok) throw new Error(usersData.message || "Unable to load users.");
+      if (!rolesResponse.ok) throw new Error(rolesData.message || "Unable to load access control.");
+
+      setAdminUsers(usersData);
+      setAdminRoles(rolesData);
+      setNewUser((current) => ({
+        ...current,
+        roleId: current.roleId || String(rolesData[0]?.id || ""),
+      }));
+    } catch (error) {
+      setErrorMessage(error.message || "Unable to load administration data.");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const createAdminUser = async (event) => {
+    event.preventDefault();
+
+    try {
+      const response = await fetch(buildApiUrl("/administration/users"), {
+        method: "POST",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(newUser),
+      });
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.message || "Unable to create user.");
+
+      setSuccessMessage(data.message);
+      setShowCreateUser(false);
+      setNewUser({ username: "", email: "", password: "", roleId: String(adminRoles[0]?.id || ""), employeeId: "" });
+      await loadAdministrationData();
+    } catch (error) {
+      setErrorMessage(error.message || "Unable to create user.");
+    }
+  };
+
+  const toggleUserStatus = async (userRecord) => {
+    try {
+      const response = await fetch(buildApiUrl(`/administration/users/${userRecord.id}/status`), {
+        method: "PATCH",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !userRecord.isActive }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to update user status.");
+      await loadAdministrationData();
+    } catch (error) {
+      setErrorMessage(error.message || "Unable to update user status.");
+    }
+  };
+
+  const handleLogoChange = (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file || !file.type.startsWith("image/")) {
+      setErrorMessage("Please choose a PNG, JPG, or other image file.");
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const preview = String(reader.result);
+      setLogoPreview(preview);
+      localStorage.setItem("settings-logo", preview);
+      setSuccessMessage("Logo updated successfully.");
+      setErrorMessage("");
+    };
+
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoPreview(logo);
+    localStorage.removeItem("settings-logo");
+    setSuccessMessage("Logo restored to the default.");
+    setErrorMessage("");
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    const value = searchTerm.trim().toLowerCase();
+    const matchingTab = [
+      ["general", ["general", "organization", "display", "language"]],
+      ["account", ["account", "profile", "personal"]],
+      ["security", ["security", "password", "privacy"]],
+      ["notifications", ["notification", "alert", "reminder"]],
+      ["administration", ["administration", "system", "user"]],
+      ["attendance", ["attendance", "check-in", "working"]],
+      ["leave", ["leave", "holiday"]],
+      ["activity", ["activity", "log", "audit"]],
+    ].find(([, terms]) => terms.some((term) => value.includes(term)));
+
+    if (matchingTab) {
+      handleTabChange(matchingTab[0]);
+    } else if (value) {
+      setErrorMessage("No matching Settings section found.");
+    }
+  };
+
 
   /* =====================================================
      WORKING DAY TOGGLE
@@ -487,7 +799,7 @@ const Settings = () => {
 
   return (
 
-    <div className="settings-page">
+    <div className={`settings-page ${brightMode ? "bright-mode" : ""}`}>
 
       {/* =================================================
           EXISTING VEO SIDEBAR
@@ -519,6 +831,10 @@ const Settings = () => {
               <input
                 type="text"
                 placeholder="Search..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                aria-label="Search settings"
               />
 
             </div>
@@ -528,6 +844,7 @@ const Settings = () => {
               type="button"
               className="topbar-action"
               title="Notifications"
+              onClick={() => handleTabChange("notifications")}
             >
 
               <FiBell />
@@ -543,6 +860,7 @@ const Settings = () => {
               type="button"
               className="topbar-action"
               title="Theme"
+              onClick={() => setBrightMode((previous) => !previous)}
             >
               <FiSun />
             </button>
@@ -551,7 +869,12 @@ const Settings = () => {
             <div className="topbar-divider"></div>
 
 
-            <div className="settings-user-profile">
+            <button
+              type="button"
+              className="settings-user-profile"
+              onClick={() => handleTabChange("account")}
+              title="View profile"
+            >
 
               <div className="settings-user-avatar">
                 <FiUser />
@@ -572,7 +895,7 @@ const Settings = () => {
 
               <FiChevronDown className="user-chevron" />
 
-            </div>
+            </button>
 
           </div>
 
@@ -1342,7 +1665,7 @@ const Settings = () => {
                           <div className="logo-controls">
 
                             <img
-                              src={logo}
+                              src={logoPreview}
                               alt="VEO Logo"
                               className="organization-logo"
                             />
@@ -1352,6 +1675,7 @@ const Settings = () => {
                               <button
                                 type="button"
                                 className="change-logo-button"
+                                onClick={() => logoInputRef.current?.click()}
                               >
 
                                 <FiUpload />
@@ -1363,6 +1687,7 @@ const Settings = () => {
                               <button
                                 type="button"
                                 className="remove-logo-button"
+                                onClick={handleRemoveLogo}
                               >
 
                                 <FiTrash2 />
@@ -1370,6 +1695,14 @@ const Settings = () => {
                                 Remove
 
                               </button>
+
+                              <input
+                                ref={logoInputRef}
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                className="logo-file-input"
+                                onChange={handleLogoChange}
+                              />
 
                             </div>
 
@@ -1570,7 +1903,6 @@ const Settings = () => {
 
                           <div className="visual-select">
 
-                            <FiLanguages />
 
                             <select
                               value={
@@ -2401,41 +2733,71 @@ const Settings = () => {
 
                   <div className="simple-settings-grid">
 
-                    <div className="simple-setting-card">
+                    <button
+                      type="button"
+                      className={`simple-setting-card notification-setting-card ${
+                        notificationSettings.system ? "enabled" : "disabled"
+                      }`}
+                      onClick={() => toggleNotification("system")}
+                      aria-pressed={notificationSettings.system}
+                    >
                       <FiBell />
                       <div>
                         <strong>
                           System Notifications
                         </strong>
                         <span>
-                          Enabled
+                          {notificationSettings.system ? "Enabled" : "Disabled"}
                         </span>
                       </div>
-                    </div>
+                      <span className="notification-toggle" aria-hidden="true">
+                        <span />
+                      </span>
+                    </button>
 
-                    <div className="simple-setting-card">
+                    <button
+                      type="button"
+                      className={`simple-setting-card notification-setting-card ${
+                        notificationSettings.leave ? "enabled" : "disabled"
+                      }`}
+                      onClick={() => toggleNotification("leave")}
+                      aria-pressed={notificationSettings.leave}
+                    >
                       <FiCalendar />
                       <div>
                         <strong>
                           Leave Notifications
                         </strong>
                         <span>
-                          Enabled
+                          {notificationSettings.leave ? "Enabled" : "Disabled"}
                         </span>
                       </div>
-                    </div>
+                      <span className="notification-toggle" aria-hidden="true">
+                        <span />
+                      </span>
+                    </button>
 
-                    <div className="simple-setting-card">
+                    <button
+                      type="button"
+                      className={`simple-setting-card notification-setting-card ${
+                        notificationSettings.attendance ? "enabled" : "disabled"
+                      }`}
+                      onClick={() => toggleNotification("attendance")}
+                      aria-pressed={notificationSettings.attendance}
+                    >
                       <FiClock />
                       <div>
                         <strong>
                           Attendance Alerts
                         </strong>
                         <span>
-                          Enabled
+                          {notificationSettings.attendance ? "Enabled" : "Disabled"}
                         </span>
                       </div>
-                    </div>
+                      <span className="notification-toggle" aria-hidden="true">
+                        <span />
+                      </span>
+                    </button>
 
                   </div>
 
@@ -2474,39 +2836,69 @@ const Settings = () => {
 
                   <div className="simple-settings-grid">
 
-                    <div className="simple-setting-card">
+                    <label className="simple-setting-card attendance-time-card">
                       <FiClock />
                       <div>
                         <strong>
                           Work Start Time
                         </strong>
                         <span>
-                          08:00 AM
+                          Daily check-in begins
                         </span>
                       </div>
-                    </div>
+                      <input
+                        type="time"
+                        value={attendanceSettings.startTime}
+                        onChange={(event) => updateAttendanceTime("startTime", event.target.value)}
+                        aria-label="Work Start Time"
+                      />
+                    </label>
 
-                    <div className="simple-setting-card">
+                    <label className="simple-setting-card attendance-time-card">
                       <FiClock />
                       <div>
                         <strong>
                           Work End Time
                         </strong>
                         <span>
-                          04:30 PM
+                          Daily check-out closes
                         </span>
                       </div>
-                    </div>
+                      <input
+                        type="time"
+                        value={attendanceSettings.endTime}
+                        min={attendanceSettings.startTime}
+                        onChange={(event) => updateAttendanceTime("endTime", event.target.value)}
+                        aria-label="Work End Time"
+                      />
+                    </label>
 
-                    <div className="simple-setting-card">
+                    <div className="simple-setting-card attendance-status-card">
                       <FiActivity />
                       <div>
                         <strong>
                           Attendance Status
                         </strong>
                         <span>
-                          Present / Late / Absent
+                          Choose statuses used by attendance records
                         </span>
+                        <div className="attendance-status-buttons">
+                          {[
+                            ["present", "Present"],
+                            ["late", "Late"],
+                            ["absent", "Absent"],
+                          ].map(([status, label]) => (
+                            <button
+                              key={status}
+                              type="button"
+                              className={attendanceSettings.statuses[status] ? "active" : ""}
+                              onClick={() => toggleAttendanceStatus(status)}
+                              aria-pressed={attendanceSettings.statuses[status]}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
@@ -2547,41 +2939,59 @@ const Settings = () => {
 
                   <div className="simple-settings-grid">
 
-                    <div className="simple-setting-card">
+                    <button
+                      type="button"
+                      className={`simple-setting-card notification-setting-card ${leaveSettings.annual ? "enabled" : "disabled"}`}
+                      onClick={() => toggleLeaveSetting("annual")}
+                      aria-pressed={leaveSettings.annual}
+                    >
                       <FiCalendar />
                       <div>
                         <strong>
                           Annual Leave
                         </strong>
                         <span>
-                          Available
+                          {leaveSettings.annual ? "Available" : "Disabled"}
                         </span>
                       </div>
-                    </div>
+                      <span className="notification-toggle" aria-hidden="true"><span /></span>
+                    </button>
 
-                    <div className="simple-setting-card">
+                    <button
+                      type="button"
+                      className={`simple-setting-card notification-setting-card ${leaveSettings.medical ? "enabled" : "disabled"}`}
+                      onClick={() => toggleLeaveSetting("medical")}
+                      aria-pressed={leaveSettings.medical}
+                    >
                       <FiCalendar />
                       <div>
                         <strong>
                           Sick Leave
                         </strong>
                         <span>
-                          Available
+                          {leaveSettings.medical ? "Available" : "Disabled"}
                         </span>
                       </div>
-                    </div>
+                      <span className="notification-toggle" aria-hidden="true"><span /></span>
+                    </button>
 
-                    <div className="simple-setting-card">
+                    <button
+                      type="button"
+                      className={`simple-setting-card notification-setting-card ${leaveSettings.other ? "enabled" : "disabled"}`}
+                      onClick={() => toggleLeaveSetting("other")}
+                      aria-pressed={leaveSettings.other}
+                    >
                       <FiCalendar />
                       <div>
                         <strong>
                           Other Leave
                         </strong>
                         <span>
-                          Available
+                          {leaveSettings.other ? "Available" : "Disabled"}
                         </span>
                       </div>
-                    </div>
+                      <span className="notification-toggle" aria-hidden="true"><span /></span>
+                    </button>
 
                   </div>
 
@@ -2618,33 +3028,86 @@ const Settings = () => {
 
                   </div>
 
-                  <div className="simple-settings-grid">
-
-                    <div className="simple-setting-card">
+                  <div className="admin-view-switcher">
+                    <button
+                      type="button"
+                      className={administrationView === "users" ? "active" : ""}
+                      onClick={() => setAdministrationView("users")}
+                    >
                       <FiUsers />
-                      <div>
-                        <strong>
-                          User Management
-                        </strong>
-                        <span>
-                          Administrator access
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="simple-setting-card">
+                      User Management
+                    </button>
+                    <button
+                      type="button"
+                      className={administrationView === "access" ? "active" : ""}
+                      onClick={() => setAdministrationView("access")}
+                    >
                       <FiShield />
-                      <div>
-                        <strong>
-                          Access Control
-                        </strong>
-                        <span>
-                          Role-based permissions
-                        </span>
-                      </div>
-                    </div>
-
+                      Access Control
+                    </button>
                   </div>
+
+                  {administrationView === "users" && (
+                    <section className="admin-management-section">
+                      <div className="admin-section-heading">
+                        <div>
+                          <h3>Users</h3>
+                          <p>Manage administrator accounts and access status.</p>
+                        </div>
+                        <button type="button" className="admin-primary-button" onClick={() => setShowCreateUser((current) => !current)}>
+                          <FiPlus />
+                          Create User
+                        </button>
+                      </div>
+
+                      {showCreateUser && (
+                        <form className="admin-create-form" onSubmit={createAdminUser}>
+                          <input placeholder="Username" value={newUser.username} onChange={(event) => setNewUser({ ...newUser, username: event.target.value })} required />
+                          <input type="email" placeholder="Email address" value={newUser.email} onChange={(event) => setNewUser({ ...newUser, email: event.target.value })} required />
+                          <input type="password" placeholder="Temporary password" value={newUser.password} onChange={(event) => setNewUser({ ...newUser, password: event.target.value })} minLength="8" required />
+                          <select value={newUser.roleId} onChange={(event) => setNewUser({ ...newUser, roleId: event.target.value })} required>
+                            <option value="">Select role</option>
+                            {adminRoles.map((role) => <option key={role.id} value={role.id}>{role.role}</option>)}
+                          </select>
+                          <input placeholder="Employee ID (optional)" value={newUser.employeeId} onChange={(event) => setNewUser({ ...newUser, employeeId: event.target.value })} />
+                          <button type="submit" className="admin-primary-button">Create Account</button>
+                        </form>
+                      )}
+
+                      {adminLoading ? <p className="admin-muted-text">Loading users...</p> : (
+                        <div className="admin-table-wrap">
+                          <table className="admin-table">
+                            <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
+                            <tbody>
+                              {adminUsers.map((userRecord) => (
+                                <tr key={userRecord.id}>
+                                  <td><strong>{userRecord.username}</strong><span>{userRecord.email}</span></td>
+                                  <td>{userRecord.role}</td>
+                                  <td><span className={`admin-status ${userRecord.isActive ? "active" : "inactive"}`}>{userRecord.isActive ? "Active" : "Disabled"}</span></td>
+                                  <td><button type="button" className="admin-text-button" onClick={() => toggleUserStatus(userRecord)}>{userRecord.isActive ? "Disable" : "Enable"}</button></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </section>
+                  )}
+
+                  {administrationView === "access" && (
+                    <section className="admin-management-section">
+                      <div className="admin-section-heading"><div><h3>Access Control</h3><p>Review permissions assigned to each system role.</p></div></div>
+                      <div className="admin-role-grid">
+                        {adminRoles.map((role) => (
+                          <article className="admin-role-card" key={role.id}>
+                            <div><FiShield /><strong>{role.role}</strong></div>
+                            <p>{role.description || "Configured system role"}</p>
+                            <span>{role.permissionCount} permissions</span>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  )}
 
                 </div>
 
@@ -2750,6 +3213,19 @@ const Settings = () => {
                           staff_monitor
                         </span>
                       </div>
+                    </div>
+
+                    <div className="backup-actions">
+                      <button type="button" className="admin-primary-button" onClick={createSettingsBackup}>
+                        <FiDownload />
+                        Download Backup
+                      </button>
+                      <button type="button" className="admin-view-switcher-button" onClick={() => backupInputRef.current?.click()}>
+                        <FiUpload />
+                        Restore Backup
+                      </button>
+                      <input ref={backupInputRef} type="file" accept="application/json" className="logo-file-input" onChange={restoreSettingsBackup} />
+                      {backupMessage && <span className="backup-message">{backupMessage}</span>}
                     </div>
 
                   </div>
@@ -2872,18 +3348,24 @@ const Settings = () => {
 
                   </div>
 
-                  <div className="empty-settings-state">
+                  <div className="support-grid">
+                    <button type="button" className="support-card" onClick={() => window.location.href = "mailto:it@veo.gov.vu?subject=Staff%20Monitoring%20System%20Support"}>
+                      <FiMail />
+                      <span><strong>Email IT Support</strong><small>Contact the VEO IT Section</small></span>
+                      <FiExternalLink />
+                    </button>
+                    <button type="button" className="support-card" onClick={() => window.open("https://www.veo.gov.vu", "_blank", "noopener,noreferrer")}>
+                      <FiExternalLink />
+                      <span><strong>Open VEO Support Portal</strong><small>Visit the official support website</small></span>
+                      <FiExternalLink />
+                    </button>
+                  </div>
 
-                    <FiHelpCircle />
-
-                    <h3>
-                      Help & Support
-                    </h3>
-
-                    <p>
-                      Contact the VEO IT Section for technical support.
-                    </p>
-
+                  <div className="support-faq">
+                    <h3>Quick Help</h3>
+                    <details><summary>How do I change my password?</summary><p>Open Security & Privacy, enter your current password, then choose a new password of at least eight characters.</p></details>
+                    <details><summary>Where can I manage users?</summary><p>Open System Administration, then choose User Management or Access Control.</p></details>
+                    <details><summary>How do I keep a copy of settings?</summary><p>Open Backup & Recovery and download a JSON backup of your current preferences.</p></details>
                   </div>
 
                 </div>

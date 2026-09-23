@@ -416,7 +416,11 @@ const Reports = () => {
 
       link.href = url;
 
-      link.download = report.name || "report";
+      const reportName = report.name || "report";
+
+      link.download = reportName.toLowerCase().endsWith(".pdf")
+        ? reportName
+        : `${reportName}.pdf`;
 
       document.body.appendChild(link);
 

@@ -61,6 +61,43 @@ const normalizeSection = (value) => {
     return String(value).trim();
 };
 
+const createPdfBuffer = (lines) => {
+    const escapePdfText = (value) => String(value)
+        .replace(/\\/g, "\\\\")
+        .replace(/\(/g, "\\(")
+        .replace(/\)/g, "\\)");
+
+    const textCommands = lines
+        .map((line, index) => `${index === 0 ? "" : "0 -18 Td "}(${escapePdfText(line)}) Tj`)
+        .join(" ");
+
+    const content = `BT /F1 12 Tf 50 760 Td ${textCommands} ET`;
+    const objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        `<< /Length ${Buffer.byteLength(content, "utf8")} >>\nstream\n${content}\nendstream`,
+    ];
+
+    let pdf = "%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n";
+    const offsets = [0];
+
+    objects.forEach((object, index) => {
+        offsets.push(Buffer.byteLength(pdf, "binary"));
+        pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+    });
+
+    const xrefOffset = Buffer.byteLength(pdf, "binary");
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    pdf += offsets.slice(1)
+        .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
+        .join("");
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+    return Buffer.from(pdf, "binary");
+};
+
 
 // ======================================================
 // GET REPORT SUMMARY
@@ -502,7 +539,9 @@ router.get(
 
                     start_date DATE,
 
-                    end_date DATE
+                    end_date DATE,
+
+                    section VARCHAR(255)
                 )
             `);
 
@@ -519,6 +558,11 @@ router.get(
             await pool.query(`
                 ALTER TABLE reports
                 ADD COLUMN IF NOT EXISTS end_date DATE
+            `);
+
+            await pool.query(`
+                ALTER TABLE reports
+                ADD COLUMN IF NOT EXISTS section VARCHAR(255)
             `);
 
 
@@ -547,7 +591,9 @@ router.get(
 
                         start_date,
 
-                        end_date
+                        end_date,
+
+                        section
 
                     FROM reports
 
@@ -583,7 +629,8 @@ router.get(
                     format: report.format,
                     url: report.url,
                     startDate: report.start_date,
-                    endDate: report.end_date
+                    endDate: report.end_date,
+                    section: report.section
                 }));
 
 
@@ -730,6 +777,8 @@ router.post(
                 });
             }
 
+            section = normalizeSection(section);
+
 
             // ==================================================
             // CREATE REPORT TABLE IF REQUIRED
@@ -757,7 +806,9 @@ router.post(
 
                     start_date DATE,
 
-                    end_date DATE
+                    end_date DATE,
+
+                    section VARCHAR(255)
                 )
             `);
 
@@ -789,6 +840,11 @@ router.post(
             await pool.query(`
                 ALTER TABLE reports
                 ADD COLUMN IF NOT EXISTS end_date DATE
+            `);
+
+            await pool.query(`
+                ALTER TABLE reports
+                ADD COLUMN IF NOT EXISTS section VARCHAR(255)
             `);
 
 
@@ -849,7 +905,8 @@ router.post(
                         format,
                         url,
                         start_date,
-                        end_date
+                        end_date,
+                        section
                     )
 
                     VALUES
@@ -860,7 +917,8 @@ router.post(
                         $4,
                         $5,
                         $6,
-                        $7
+                        $7,
+                        $8
                     )
 
                     RETURNING *
@@ -880,7 +938,9 @@ router.post(
 
                         startDate,
 
-                        endDate
+                        endDate,
+
+                        section
                     ]
                 );
 
@@ -928,11 +988,15 @@ router.get(
 
     authorizeRoles(
         "system_admin",
+        "commission",
         "director",
         "deputy_director",
         "manager",
+        "ict_officer",
         "hr",
-        "finance"
+        "finance",
+        "compliance",
+        "officer"
     ),
 
     async (req, res) => {
@@ -978,47 +1042,28 @@ router.get(
                 result.rows[0];
 
 
-            // ==================================================
-            // TEMPORARY TEXT REPORT
-            // ==================================================
+            const pdf = createPdfBuffer([
+                "VANUATU ELECTORAL OFFICE",
+                "STAFF MONITORING SYSTEM",
+                "",
+                `Report: ${report.name}`,
+                `Report Type: ${report.type}`,
+                `Department/Section: ${report.section || "All"}`,
+                `Generated By: ${report.generated_by || "System"}`,
+                `Generated At: ${report.generated_at || ""}`,
+                `Date Range: ${report.start_date || ""} to ${report.end_date || ""}`,
+                "",
+                "This report was generated by the Staff Monitoring System.",
+            ]);
 
-            const content = `
-
-VANUATU ELECTORAL OFFICE
-STAFF MONITORING SYSTEM
-========================================
-
-Report: ${report.name}
-
-Report Type: ${report.type}
-
-Generated By: ${report.generated_by || "System"}
-
-Generated At: ${report.generated_at || ""}
-
-Date Range:
-${report.start_date || ""} to ${report.end_date || ""}
-
-========================================
-
-This report was generated by the
-Staff Monitoring System.
-
-`;
-
-
-            res.setHeader(
-                "Content-Type",
-                "text/plain"
-            );
-
+            res.setHeader("Content-Type", "application/pdf");
             res.setHeader(
                 "Content-Disposition",
-                `attachment; filename="report-${report.id}.txt"`
+                `attachment; filename="report-${report.id}.pdf"`
             );
+            res.setHeader("Content-Length", pdf.length);
 
-
-            return res.send(content);
+            return res.end(pdf);
 
 
         } catch (error) {

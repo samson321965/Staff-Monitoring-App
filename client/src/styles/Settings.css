@@ -6,7 +6,7 @@
 .settings-page {
   min-height: 100vh;
   display: flex;
-  overflow-x: hidden;
+  overflow-x: clip;
 
   color: #ffffff;
 
@@ -43,9 +43,9 @@
    ========================================================= */
 
 .settings-main {
-  margin-left: 310px;
-
-  width: calc(100% - 310px);
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
 
   min-height: 100vh;
 
@@ -53,7 +53,7 @@
 
   position: relative;
 
-  overflow-x: hidden;
+  overflow-x: clip;
 
   background:
     radial-gradient(
@@ -248,6 +248,24 @@
   min-width: 185px;
 
   cursor: pointer;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.settings-user-profile:hover .settings-user-details strong {
+  color: #ffffff;
+}
+
+.settings-page.bright-mode {
+  filter: brightness(1.18);
+}
+
+.logo-file-input {
+  display: none;
 }
 
 .settings-user-avatar {
@@ -1486,22 +1504,6 @@
 }
 
 
-/* =========================================================
-   ATTENDANCE & LEAVE
-   ========================================================= */
-
-.attendance-layout {
-  display: grid;
-
-  grid-template-columns:
-    minmax(0, 1fr)
-    200px;
-
-  gap: 12px;
-
-  align-items: stretch;
-}
-
 .attendance-fields .two-column-fields {
   grid-template-columns:
     repeat(2, minmax(0, 1fr));
@@ -1996,6 +1998,61 @@
     rgba(2, 22, 58, 0.65);
 }
 
+.notification-setting-card {
+  position: relative;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.notification-setting-card:hover,
+.notification-setting-card:focus-visible {
+  border-color: #4d9cff;
+  outline: none;
+  background: rgba(13, 48, 108, 0.8);
+}
+
+.notification-setting-card.disabled {
+  border-color: rgba(131, 166, 211, 0.22);
+  opacity: 0.72;
+}
+
+.notification-setting-card.disabled > svg {
+  color: #83a6d3;
+}
+
+.notification-toggle {
+  width: 34px;
+  height: 19px;
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  padding: 2px;
+  border-radius: 20px;
+  background: #335276;
+  transition: background 0.2s ease;
+}
+
+.notification-toggle > span {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #ffffff;
+  transform: translateX(0);
+  transition: transform 0.2s ease;
+}
+
+.notification-setting-card.enabled .notification-toggle {
+  background: #168cff;
+}
+
+.notification-setting-card.enabled .notification-toggle > span {
+  transform: translateX(15px);
+}
+
 .simple-setting-card > svg {
   color: #4d9cff;
 
@@ -2020,6 +2077,68 @@
   color: #83a6d3;
 
   font-size: 10px;
+}
+
+.attendance-time-card {
+  cursor: pointer;
+}
+
+.attendance-time-card:focus-within,
+.attendance-status-card:focus-within {
+  border-color: #4d9cff;
+}
+
+.attendance-time-card input {
+  min-width: 94px;
+  margin-left: auto;
+  padding: 7px 8px;
+  border: 1px solid rgba(76, 136, 219, 0.45);
+  border-radius: 6px;
+  color: #ffffff;
+  background: #061a42;
+  font: inherit;
+  font-size: 11px;
+  color-scheme: dark;
+}
+
+.attendance-time-card input:focus {
+  outline: 2px solid rgba(77, 156, 255, 0.35);
+  outline-offset: 1px;
+}
+
+.attendance-status-card {
+  grid-column: 1 / -1;
+}
+
+.attendance-status-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.attendance-status-buttons button {
+  padding: 5px 9px;
+  border: 1px solid rgba(131, 166, 211, 0.3);
+  border-radius: 14px;
+  color: #83a6d3;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  transition: 0.2s ease;
+}
+
+.attendance-status-buttons button:hover,
+.attendance-status-buttons button:focus-visible {
+  border-color: #4d9cff;
+  outline: none;
+}
+
+.attendance-status-buttons button.active {
+  border-color: #168cff;
+  color: #ffffff;
+  background: #168cff;
 }
 
 
@@ -2176,10 +2295,6 @@
   }
 
   .organization-bottom {
-    grid-template-columns: 1fr;
-  }
-
-  .attendance-layout {
     grid-template-columns: 1fr;
   }
 
@@ -2414,4 +2529,304 @@
 
     scroll-behavior: auto !important;
   }
+}
+
+.admin-view-switcher {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.admin-view-switcher button,
+.admin-primary-button,
+.admin-text-button {
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.admin-view-switcher button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 13px;
+  color: #9db9e2;
+  background: rgba(2, 22, 58, 0.65);
+  border: 1px solid rgba(45, 126, 247, 0.28);
+}
+
+.admin-view-switcher button.active,
+.admin-primary-button {
+  color: #ffffff;
+  background: linear-gradient(135deg, #277cff, #1f52f4);
+}
+
+.admin-management-section {
+  border: 1px solid rgba(45, 126, 247, 0.28);
+  border-radius: 11px;
+  padding: 16px;
+  background: rgba(2, 22, 58, 0.42);
+}
+
+.admin-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.admin-section-heading h3 {
+  margin: 0 0 4px;
+  color: #ffffff;
+  font-size: 15px;
+}
+
+.admin-section-heading p,
+.admin-role-card p,
+.admin-muted-text {
+  margin: 0;
+  color: #83a6d3;
+  font-size: 10px;
+}
+
+.admin-primary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+}
+
+.admin-create-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-bottom: 15px;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(0, 12, 39, 0.5);
+}
+
+.admin-create-form input,
+.admin-create-form select {
+  min-height: 35px;
+  padding: 0 10px;
+  border: 1px solid rgba(76, 136, 219, 0.4);
+  border-radius: 6px;
+  color: #ffffff;
+  background: #061a42;
+  font: inherit;
+  font-size: 11px;
+}
+
+.admin-create-form button {
+  justify-content: center;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #c4d7ff;
+  font-size: 10px;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(76, 136, 219, 0.14);
+  text-align: left;
+}
+
+.admin-table th {
+  color: #83a6d3;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.admin-table td:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.admin-table td:first-child span {
+  color: #83a6d3;
+  font-size: 9px;
+}
+
+.admin-status {
+  padding: 4px 7px;
+  border-radius: 12px;
+  font-size: 9px;
+}
+
+.admin-status.active {
+  color: #62e5a1;
+  background: rgba(20, 184, 126, 0.16);
+}
+
+.admin-status.inactive {
+  color: #ff8e9c;
+  background: rgba(239, 51, 64, 0.14);
+}
+
+.admin-text-button {
+  padding: 5px 8px;
+  color: #8bb8ff;
+  background: transparent;
+}
+
+.admin-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-role-card {
+  padding: 12px;
+  border: 1px solid rgba(45, 126, 247, 0.28);
+  border-radius: 8px;
+  background: rgba(2, 22, 58, 0.65);
+}
+
+.admin-role-card > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  color: #ffffff;
+}
+
+.admin-role-card > div svg {
+  color: #4d9cff;
+}
+
+.admin-role-card > span {
+  display: block;
+  margin-top: 10px;
+  color: #62e5a1;
+  font-size: 9px;
+}
+
+.backup-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.admin-view-switcher-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border: 1px solid rgba(76, 136, 219, 0.4);
+  border-radius: 7px;
+  color: #c4d7ff;
+  background: rgba(2, 22, 58, 0.65);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.admin-view-switcher-button:hover {
+  border-color: #4d9cff;
+}
+
+.backup-message {
+  color: #62e5a1;
+  font-size: 10px;
+}
+
+.support-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.support-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 70px;
+  padding: 13px;
+  border: 1px solid rgba(45, 126, 247, 0.28);
+  border-radius: 10px;
+  color: #ffffff;
+  background: rgba(2, 22, 58, 0.65);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.support-card:hover,
+.support-card:focus-visible {
+  border-color: #4d9cff;
+  outline: none;
+  background: rgba(13, 48, 108, 0.8);
+}
+
+.support-card > svg:first-child {
+  color: #4d9cff;
+  font-size: 21px;
+}
+
+.support-card > svg:last-child {
+  margin-left: auto;
+  color: #83a6d3;
+  font-size: 14px;
+}
+
+.support-card span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.support-card small {
+  color: #83a6d3;
+  font-size: 9px;
+}
+
+.support-faq {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid rgba(45, 126, 247, 0.2);
+  border-radius: 10px;
+  background: rgba(2, 22, 58, 0.42);
+}
+
+.support-faq h3 {
+  margin: 0 0 9px;
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.support-faq details {
+  padding: 9px 0;
+  border-top: 1px solid rgba(76, 136, 219, 0.14);
+}
+
+.support-faq summary {
+  color: #c4d7ff;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.support-faq p {
+  margin: 7px 0 0;
+  color: #83a6d3;
+  font-size: 10px;
+  line-height: 1.5;
 }

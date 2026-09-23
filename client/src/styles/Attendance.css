@@ -10,7 +10,7 @@
   flex-direction: row;
   background: #061331;
   color: #ffffff;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* =========================================================

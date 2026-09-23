@@ -24,7 +24,7 @@
     Arial,
     sans-serif;
 
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 
@@ -33,15 +33,14 @@
    ========================================================= */
 
 .reports-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
   position: relative;
-
-  margin-left: 190px;
-
-  width: calc(100% - 190px);
 
   min-height: 100vh;
 
-  overflow: hidden;
+  overflow: clip;
 
   background:
     radial-gradient(
@@ -1718,9 +1717,7 @@
 @media (max-width: 1000px) {
 
   .reports-main {
-    margin-left: 170px;
-
-    width: calc(100% - 170px);
+    width: auto;
   }
 
   .reports-content {
@@ -1759,9 +1756,7 @@
 @media (max-width: 700px) {
 
   .reports-main {
-    margin-left: 75px;
-
-    width: calc(100% - 75px);
+    width: auto;
   }
 
   .reports-content {
