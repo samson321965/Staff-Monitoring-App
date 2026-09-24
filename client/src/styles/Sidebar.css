@@ -12,6 +12,15 @@
     overflow-y: auto;
 }
 
+.sidebar.has-background-image {
+    background-image:
+        linear-gradient(rgba(4, 19, 48, 0.82), rgba(4, 19, 48, 0.9)),
+        var(--sidebar-background-image);
+    background-position: center;
+    background-size: cover;
+    background-attachment: fixed;
+}
+
 .sidebar-logo{
     display:flex;
     align-items:center;

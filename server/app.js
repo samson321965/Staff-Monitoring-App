@@ -13,6 +13,8 @@ const authRoutes = require("./routes/auth");
 const departmentsRoutes = require("./routes/departments");
 const positionsRoutes = require("./routes/positions");
 const administrationRoutes = require("./routes/administration");
+const notificationRoutes = require("./routes/notifications");
+const settingsRoutes = require("./routes/settings");
 const app = express();
 
 // Middleware
@@ -29,6 +31,8 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/departments", departmentsRoutes);
 app.use("/api/positions", positionsRoutes);
 app.use("/api/administration", administrationRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/settings", settingsRoutes);
 // Home route
 app.get("/", (req, res) => {
     res.send("Staff Monitoring API is Running...");

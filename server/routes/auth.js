@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 
 const pool = require("../config/database");
 const { authenticateToken } = require("../middleware/authMiddleware");
+const serverPackage = require("../package.json");
 
 const router = express.Router();
 
@@ -77,6 +78,11 @@ router.post("/login", async (req, res) => {
             });
         }
 
+        const loginUpdate = await pool.query(
+            `UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1 RETURNING last_login`,
+            [user.id]
+        );
+
         const token = jwt.sign(
             {
                 id: user.id,
@@ -101,6 +107,9 @@ router.post("/login", async (req, res) => {
                 username: user.username,
                 email: user.email,
                 role: user.role_name
+                ,
+                is_active: true,
+                last_login: loginUpdate.rows[0]?.last_login || null
             }
         });
 
@@ -116,6 +125,139 @@ router.post("/login", async (req, res) => {
             error: error.message
         });
 
+    }
+});
+
+router.get("/me", authenticateToken, async (req, res) => {
+    try {
+        await pool.query(`
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS avatar_url TEXT
+        `);
+
+        await pool.query(`
+            INSERT INTO system_settings (setting_key, setting_value, description)
+            VALUES
+                ('security_level', 'High', 'Default security level'),
+                ('system_version', 'v1.0.0', 'Application release version')
+            ON CONFLICT (setting_key) DO NOTHING
+        `);
+
+        const result = await pool.query(`
+            SELECT
+                u.id,
+                u.username,
+                u.email,
+                u.employee_id,
+                u.is_active,
+                u.last_login,
+                u.password_changed_at,
+                u.avatar_url,
+                r.role_name
+            FROM users u
+            INNER JOIN roles r ON r.id = u.role_id
+            WHERE u.id = $1
+        `, [req.user.id]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: "User not found." });
+        }
+
+        const settingsResult = await pool.query(`
+            SELECT setting_key, setting_value
+            FROM system_settings
+            WHERE setting_key IN ('security_level', 'system_version')
+        `);
+
+        const systemSettings = Object.fromEntries(
+            settingsResult.rows.map((setting) => [
+                setting.setting_key,
+                setting.setting_value,
+            ])
+        );
+
+        const user = result.rows[0];
+        const highSecurityRoles = ["system_admin", "director", "deputy_director", "manager"];
+
+        res.json({
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            employee_id: user.employee_id,
+            role: user.role_name,
+            accountStatus: user.is_active ? "Active" : "Disabled",
+            lastLogin: user.last_login,
+            securityLevel: systemSettings.security_level || (
+                highSecurityRoles.includes(user.role_name)
+                    ? "High"
+                    : "Standard"
+            ),
+            passwordChangedAt: user.password_changed_at,
+            avatarUrl: user.avatar_url,
+            systemVersion: systemSettings.system_version || `v${serverPackage.version}`,
+        });
+    } catch (error) {
+        console.error("Profile lookup error:", error);
+        res.status(500).json({ message: "Unable to load account status." });
+    }
+});
+
+router.put("/profile", authenticateToken, async (req, res) => {
+    try {
+        await pool.query(`
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS avatar_url TEXT
+        `);
+
+        const username = String(req.body.username || "").trim();
+        const email = String(req.body.email || "").trim().toLowerCase();
+        const avatarUrl = req.body.avatarUrl || null;
+
+        if (!username || !email) {
+            return res.status(400).json({
+                message: "Username and email address are required.",
+            });
+        }
+
+        if (!/^\S+@\S+\.\S+$/.test(email)) {
+            return res.status(400).json({
+                message: "Please enter a valid email address.",
+            });
+        }
+
+        if (avatarUrl && (!String(avatarUrl).startsWith("data:image/") || String(avatarUrl).length > 2_000_000)) {
+            return res.status(400).json({
+                message: "Profile picture must be an image smaller than 1.5 MB.",
+            });
+        }
+
+        const result = await pool.query(`
+            UPDATE users
+            SET username = $1,
+                email = $2,
+                avatar_url = $3
+            WHERE id = $4
+            RETURNING id, username, email, employee_id, avatar_url
+        `, [username, email, avatarUrl, req.user.id]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: "User not found." });
+        }
+
+        res.json({
+            message: "Profile updated successfully.",
+            user: result.rows[0],
+        });
+    } catch (error) {
+        console.error("Profile update error:", error);
+
+        if (error.code === "23505") {
+            return res.status(409).json({
+                message: "That username or email is already in use.",
+            });
+        }
+
+        res.status(500).json({ message: "Unable to update profile." });
     }
 });
 

@@ -34,6 +34,7 @@
       #00153d 45%,
       #02112f 100%
     );
+  background-attachment: fixed;
 }
 
 
@@ -61,6 +62,7 @@
       rgba(0, 102, 255, 0.06),
       transparent 32%
     );
+  background-attachment: fixed;
 }
 
 
@@ -258,6 +260,78 @@
 
 .settings-user-profile:hover .settings-user-details strong {
   color: #ffffff;
+}
+
+.account-profile-form {
+  gap: 14px;
+}
+
+.profile-picture-editor {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgba(45, 126, 247, 0.28);
+  border-radius: 10px;
+  background: rgba(2, 22, 58, 0.55);
+}
+
+.profile-picture-preview {
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 72px;
+  overflow: hidden;
+  border: 2px solid rgba(77, 156, 255, 0.55);
+  border-radius: 50%;
+  color: #ffffff;
+  background: linear-gradient(135deg, #277cff, #5e25e9);
+  font-size: 30px;
+}
+
+.profile-picture-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-picture-editor > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.profile-picture-editor strong {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.profile-picture-editor span {
+  color: #83a6d3;
+  font-size: 10px;
+}
+
+.profile-picture-actions {
+  display: flex;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 7px !important;
+  margin-top: 4px;
+}
+
+.profile-picture-actions .admin-primary-button,
+.profile-picture-actions .remove-logo-button {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 10px;
+}
+
+.account-profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
 }
 
 .settings-page.bright-mode {
@@ -505,6 +579,19 @@
   transition:
     transform 0.25s ease,
     border-color 0.25s ease;
+}
+
+.overview-action-card {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.overview-action-card:focus-visible {
+  outline: 2px solid #4d9cff;
+  outline-offset: 2px;
 }
 
 .overview-card:hover {
@@ -2661,6 +2748,28 @@
   font-size: 9px;
 }
 
+.admin-role-select {
+  min-width: 135px;
+  padding: 6px 8px;
+  border: 1px solid rgba(76, 136, 219, 0.4);
+  border-radius: 6px;
+  color: #c4d7ff;
+  background: #061a42;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+}
+
+.admin-role-select:focus-visible {
+  outline: 2px solid rgba(77, 156, 255, 0.45);
+  outline-offset: 1px;
+}
+
+.admin-role-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .admin-status {
   padding: 4px 7px;
   border-radius: 12px;
@@ -2829,4 +2938,30 @@
   color: #83a6d3;
   font-size: 10px;
   line-height: 1.5;
+}
+
+.sidebar-background-field {
+  grid-column: 1 / -1;
+}
+
+.sidebar-background-preview {
+  width: 100%;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin: 5px 0 7px;
+  border: 1px solid rgba(76, 136, 219, 0.4);
+  border-radius: 7px;
+  color: #83a6d3;
+  background: #081a3a;
+  font-size: 10px;
+}
+
+.sidebar-background-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.72;
 }

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import "../styles/Sidebar.css";
 import {
@@ -14,6 +15,18 @@ import logo from "../assets/images/logo.png";
 
 function Sidebar() {
   const navigate = useNavigate();
+    const [backgroundImage, setBackgroundImage] = useState(() =>
+        localStorage.getItem("sidebar-background") || ""
+    );
+
+    useEffect(() => {
+        const refreshBackground = () => {
+            setBackgroundImage(localStorage.getItem("sidebar-background") || "");
+        };
+
+        window.addEventListener("sidebar-background-changed", refreshBackground);
+        return () => window.removeEventListener("sidebar-background-changed", refreshBackground);
+    }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -23,7 +36,10 @@ function Sidebar() {
 
 return (
 
-<div className="sidebar">
+<div
+    className={`sidebar ${backgroundImage ? "has-background-image" : ""}`}
+    style={backgroundImage ? { "--sidebar-background-image": `url(${backgroundImage})` } : undefined}
+>
 
     {/* Logo */}
     <div className="sidebar-logo">

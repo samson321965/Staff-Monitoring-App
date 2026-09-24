@@ -4,6 +4,7 @@
   place-items: center;
   padding: 32px 20px;
   background: #edf4f2;
+  background-attachment: fixed;
   color: #183532;
 }
 

@@ -149,4 +149,52 @@ router.patch("/users/:id/status", async (req, res) => {
     }
 });
 
+router.patch("/users/:id/role", async (req, res) => {
+    try {
+        const userId = Number(req.params.id);
+        const roleId = Number(req.body.roleId);
+
+        if (!Number.isInteger(userId) || !Number.isInteger(roleId)) {
+            return res.status(400).json({ message: "A valid user and role are required." });
+        }
+
+        if (userId === req.user.id) {
+            return res.status(400).json({
+                message: "You cannot change your own administrator role.",
+            });
+        }
+
+        const role = await pool.query(
+            "SELECT id, role_name FROM roles WHERE id = $1",
+            [roleId]
+        );
+
+        if (role.rowCount === 0) {
+            return res.status(400).json({ message: "Selected role does not exist." });
+        }
+
+        const result = await pool.query(`
+            UPDATE users
+            SET role_id = $1
+            WHERE id = $2
+            RETURNING id, role_id AS "roleId"
+        `, [roleId, userId]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: "User not found." });
+        }
+
+        res.json({
+            message: "User role updated successfully.",
+            user: {
+                ...result.rows[0],
+                role: role.rows[0].role_name,
+            },
+        });
+    } catch (error) {
+        console.error("Update user role error:", error);
+        res.status(500).json({ message: "Unable to update user role." });
+    }
+});
+
 module.exports = router;

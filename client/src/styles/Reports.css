@@ -15,6 +15,7 @@
       #061638 50%,
       #071b40 100%
     );
+  background-attachment: fixed;
 
   color: #ffffff;
 
@@ -48,6 +49,7 @@
       rgba(20, 75, 160, 0.2),
       transparent 35%
     );
+  background-attachment: fixed;
 }
 
 
@@ -56,19 +58,21 @@
    ========================================================= */
 
 .reports-watermark {
-  position: absolute;
+  position: fixed;
 
   width: 700px;
   height: 700px;
 
   object-fit: contain;
 
-  top: 0;
-  left: 45%;
+  top: 50%;
+  left: calc(50vw + 125px);
 
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
 
   opacity: 0.045;
+
+  z-index: 0;
 
   pointer-events: none;
 
@@ -1754,6 +1758,12 @@
 
 
 @media (max-width: 700px) {
+
+  .reports-watermark {
+    width: 480px;
+    height: 480px;
+    left: calc(50vw + 105px);
+  }
 
   .reports-main {
     width: auto;

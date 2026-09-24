@@ -60,6 +60,12 @@ const Settings = () => {
     employee_id: "",
   });
 
+  const [profileForm, setProfileForm] = useState({
+    username: "",
+    email: "",
+    avatarUrl: "",
+  });
+
 
   /* =====================================================
      PASSWORD
@@ -113,7 +119,13 @@ const Settings = () => {
     localStorage.getItem("settings-logo") || logo
   );
 
+  const [sidebarBackground, setSidebarBackground] = useState(() =>
+    localStorage.getItem("sidebar-background") || ""
+  );
+
   const logoInputRef = useRef(null);
+  const sidebarBackgroundInputRef = useRef(null);
+  const profilePictureInputRef = useRef(null);
   const backupInputRef = useRef(null);
 
   const [attendanceSettings, setAttendanceSettings] = useState(() => {
@@ -157,6 +169,15 @@ const Settings = () => {
   });
 
   const [backupMessage, setBackupMessage] = useState("");
+
+  const [accountOverview, setAccountOverview] = useState({
+    accountStatus: "Loading...",
+    lastLogin: null,
+    securityLevel: "Loading...",
+    systemVersion: "Loading...",
+  });
+
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   const [administrationView, setAdministrationView] = useState("users");
   const [adminUsers, setAdminUsers] = useState([]);
@@ -248,6 +269,12 @@ const Settings = () => {
           role: parsedUser.role || "",
           employee_id: parsedUser.employee_id || "",
         });
+
+        setProfileForm((current) => ({
+          ...current,
+          username: parsedUser.username || "",
+          email: parsedUser.email || "",
+        }));
       }
 
     } catch (error) {
@@ -258,6 +285,97 @@ const Settings = () => {
       );
 
     }
+  }, []);
+
+  useEffect(() => {
+    const loadUnreadNotificationCount = async () => {
+      try {
+        const response = await fetch(
+          buildApiUrl("/notifications/unread-count"),
+          { headers: getAuthHeaders() }
+        );
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Unable to load notifications.");
+        }
+
+        setUnreadNotificationCount(Number(data.count) || 0);
+      } catch (error) {
+        console.error("Unable to load notification count:", error);
+        setUnreadNotificationCount(0);
+      }
+    };
+
+    loadUnreadNotificationCount();
+  }, []);
+
+  useEffect(() => {
+    const loadAccountOverview = async () => {
+      try {
+        const response = await fetch(buildApiUrl("/auth/me"), {
+          headers: getAuthHeaders(),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Unable to load account status.");
+        }
+
+        setAccountOverview(data);
+        setUser((current) => ({
+          ...current,
+          id: data.id || current.id,
+          username: data.username || current.username,
+          email: data.email || current.email,
+          role: data.role || current.role,
+          employee_id: data.employee_id || current.employee_id,
+        }));
+        setProfileForm({
+          username: data.username || "",
+          email: data.email || "",
+          avatarUrl: data.avatarUrl || "",
+        });
+      } catch (error) {
+        console.error("Unable to load account overview:", error);
+        setAccountOverview((current) => ({
+          ...current,
+          accountStatus: "Unavailable",
+          securityLevel: "Unavailable",
+          systemVersion: "Unavailable",
+        }));
+      }
+    };
+
+    loadAccountOverview();
+  }, []);
+
+  useEffect(() => {
+    const loadRegionalSettings = async () => {
+      try {
+        const response = await fetch(buildApiUrl("/settings/regional"), {
+          headers: getAuthHeaders(),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Unable to load regional settings.");
+        }
+
+        setGeneralSettings((current) => ({
+          ...current,
+          timeZone: data.time_zone || current.timeZone,
+          dateFormat: data.date_format || current.dateFormat,
+          timeFormat: data.time_format || current.timeFormat,
+          currency: data.currency || current.currency,
+          language: data.language || current.language,
+        }));
+      } catch (error) {
+        console.error("Unable to load regional settings:", error);
+      }
+    };
+
+    loadRegionalSettings();
   }, []);
 
   useEffect(() => {
@@ -304,6 +422,76 @@ const Settings = () => {
 
     setSuccessMessage("");
     setErrorMessage("");
+  };
+
+  const handleProfilePictureChange = (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file || !file.type.startsWith("image/")) {
+      setErrorMessage("Please choose a valid image file.");
+      return;
+    }
+
+    if (file.size > 1_500_000) {
+      setErrorMessage("Profile picture must be smaller than 1.5 MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setProfileForm((current) => ({
+        ...current,
+        avatarUrl: String(reader.result),
+      }));
+      setErrorMessage("");
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  };
+
+  const saveProfile = async (event) => {
+    event.preventDefault();
+
+    try {
+      setLoading(true);
+      const response = await fetch(buildApiUrl("/auth/profile"), {
+        method: "PUT",
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(profileForm),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to update profile.");
+      }
+
+      setUser((current) => ({
+        ...current,
+        username: data.user.username,
+        email: data.user.email,
+        employee_id: data.user.employee_id || current.employee_id,
+      }));
+      localStorage.setItem("user", JSON.stringify({
+        ...JSON.parse(localStorage.getItem("user") || "{}"),
+        username: data.user.username,
+        email: data.user.email,
+        employee_id: data.user.employee_id,
+      }));
+      setProfileForm((current) => ({
+        ...current,
+        avatarUrl: data.user.avatar_url || current.avatarUrl,
+      }));
+      setSuccessMessage(data.message);
+      setErrorMessage("");
+    } catch (error) {
+      setErrorMessage(error.message || "Unable to update profile.");
+      setSuccessMessage("");
+    } finally {
+      setLoading(false);
+    }
   };
 
 
@@ -516,6 +704,25 @@ const Settings = () => {
     setErrorMessage("");
   };
 
+  const formatLastLogin = (value) => {
+    if (!value) return "No login recorded";
+
+    const loginDate = new Date(value);
+    const today = new Date();
+    const isToday = loginDate.toLocaleDateString() === today.toLocaleDateString();
+    const formattedDate = new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(loginDate);
+    const formattedTime = new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(loginDate);
+
+    return `${isToday ? "Today, " : ""}${formattedDate}, ${formattedTime}`;
+  };
+
   const toggleNotification = (setting) => {
     setNotificationSettings((current) => ({
       ...current,
@@ -657,6 +864,36 @@ const Settings = () => {
     }
   };
 
+  const updateUserRole = async (userRecord, roleId) => {
+    if (String(roleId) === String(userRecord.roleId)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        buildApiUrl(`/administration/users/${userRecord.id}/role`),
+        {
+          method: "PATCH",
+          headers: {
+            ...getAuthHeaders(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ roleId }),
+        }
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to update user role.");
+      }
+
+      setSuccessMessage(data.message);
+      await loadAdministrationData();
+    } catch (error) {
+      setErrorMessage(error.message || "Unable to update user role.");
+    }
+  };
+
   const handleLogoChange = (event) => {
     const file = event.target.files?.[0];
 
@@ -682,6 +919,40 @@ const Settings = () => {
     setLogoPreview(logo);
     localStorage.removeItem("settings-logo");
     setSuccessMessage("Logo restored to the default.");
+    setErrorMessage("");
+  };
+
+  const handleSidebarBackgroundChange = (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file || !file.type.startsWith("image/")) {
+      setErrorMessage("Please choose a valid sidebar background image.");
+      return;
+    }
+
+    if (file.size > 2_500_000) {
+      setErrorMessage("Sidebar background images must be smaller than 2.5 MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = String(reader.result);
+      setSidebarBackground(image);
+      localStorage.setItem("sidebar-background", image);
+      window.dispatchEvent(new Event("sidebar-background-changed"));
+      setSuccessMessage("Sidebar background updated successfully.");
+      setErrorMessage("");
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  };
+
+  const removeSidebarBackground = () => {
+    setSidebarBackground("");
+    localStorage.removeItem("sidebar-background");
+    window.dispatchEvent(new Event("sidebar-background-changed"));
+    setSuccessMessage("Sidebar background restored to the default.");
     setErrorMessage("");
   };
 
@@ -783,13 +1054,34 @@ const Settings = () => {
      SAVE GENERAL SETTINGS
      ===================================================== */
 
-  const handleSaveSettings = () => {
+  const handleSaveSettings = async () => {
+    try {
+      const response = await fetch(buildApiUrl("/settings/regional"), {
+        method: "PUT",
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          timeZone: generalSettings.timeZone,
+          dateFormat: generalSettings.dateFormat,
+          timeFormat: generalSettings.timeFormat,
+          currency: generalSettings.currency,
+          language: generalSettings.language,
+        }),
+      });
+      const data = await response.json();
 
-    setSuccessMessage(
-      "Settings saved successfully."
-    );
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to save regional settings.");
+      }
 
-    setErrorMessage("");
+      setSuccessMessage(data.message);
+      setErrorMessage("");
+    } catch (error) {
+      setErrorMessage(error.message || "Unable to save regional settings.");
+      setSuccessMessage("");
+    }
   };
 
 
@@ -849,9 +1141,13 @@ const Settings = () => {
 
               <FiBell />
 
-              <span className="notification-badge">
-                3
-              </span>
+              {unreadNotificationCount > 0 && (
+                <span className="notification-badge">
+                  {unreadNotificationCount > 99
+                    ? "99+"
+                    : unreadNotificationCount}
+                </span>
+              )}
 
             </button>
 
@@ -960,7 +1256,12 @@ const Settings = () => {
 
             {/* ACCOUNT STATUS */}
 
-            <div className="overview-card">
+            <button
+              type="button"
+              className="overview-card overview-action-card"
+              onClick={() => handleTabChange("account")}
+              title="Open account settings"
+            >
 
               <div className="overview-icon account-icon">
                 <FiUser />
@@ -973,21 +1274,28 @@ const Settings = () => {
                 </span>
 
                 <strong>
-                  Active
+                  {accountOverview.accountStatus}
                 </strong>
 
                 <small>
-                  All systems operational
+                  {accountOverview.accountStatus === "Active"
+                    ? "Account in good standing"
+                    : "Review account access"}
                 </small>
 
               </div>
 
-            </div>
+            </button>
 
 
             {/* LAST LOGIN */}
 
-            <div className="overview-card">
+            <button
+              type="button"
+              className="overview-card overview-action-card"
+              onClick={() => handleTabChange("activity")}
+              title="Open account activity"
+            >
 
               <div className="overview-icon login-icon">
                 <FiCalendar />
@@ -1000,21 +1308,26 @@ const Settings = () => {
                 </span>
 
                 <strong>
-                  Today, 22 Sept 2026
+                  {formatLastLogin(accountOverview.lastLogin)}
                 </strong>
 
                 <small>
-                  User authenticated
+                  Last successful authentication
                 </small>
 
               </div>
 
-            </div>
+            </button>
 
 
             {/* SECURITY */}
 
-            <div className="overview-card">
+            <button
+              type="button"
+              className="overview-card overview-action-card"
+              onClick={() => handleTabChange("security")}
+              title="Open security settings"
+            >
 
               <div className="overview-icon security-icon">
                 <FiShield />
@@ -1027,31 +1340,41 @@ const Settings = () => {
                 </span>
 
                 <strong>
-                  High
+                  {accountOverview.securityLevel}
                 </strong>
 
                 <div className="security-meter">
 
-                  <span className="meter-segment active"></span>
-                  <span className="meter-segment active"></span>
-                  <span className="meter-segment active"></span>
-                  <span className="meter-segment active"></span>
-                  <span className="meter-segment"></span>
+                  {[0, 1, 2, 3, 4].map((segment) => (
+                    <span
+                      key={segment}
+                      className={`meter-segment ${
+                        segment < (accountOverview.securityLevel === "High" ? 4 : 2)
+                          ? "active"
+                          : ""
+                      }`}
+                    ></span>
+                  ))}
 
                   <em>
-                    2FA Ready
+                    Review security
                   </em>
 
                 </div>
 
               </div>
 
-            </div>
+            </button>
 
 
             {/* VERSION */}
 
-            <div className="overview-card">
+            <button
+              type="button"
+              className="overview-card overview-action-card"
+              onClick={() => handleTabChange("about")}
+              title="Open system information"
+            >
 
               <div className="overview-icon version-icon">
                 <FiActivity />
@@ -1064,16 +1387,16 @@ const Settings = () => {
                 </span>
 
                 <strong>
-                  v1.0.0
+                  {accountOverview.systemVersion}
                 </strong>
 
                 <small>
-                  Updated: 20 Sept 2026
+                  Application release
                 </small>
 
               </div>
 
-            </div>
+            </button>
 
           </section>
 
@@ -1714,6 +2037,56 @@ const Settings = () => {
 
                         </div>
 
+                        <div className="logo-field sidebar-background-field">
+
+                          <label>
+                            Sidebar Background
+                          </label>
+
+                          <div className="sidebar-background-preview">
+                            {sidebarBackground ? (
+                              <img src={sidebarBackground} alt="Sidebar background preview" />
+                            ) : (
+                              <span>Default dark background</span>
+                            )}
+                          </div>
+
+                          <div className="logo-buttons">
+                            <button
+                              type="button"
+                              className="change-logo-button"
+                              onClick={() => sidebarBackgroundInputRef.current?.click()}
+                            >
+                              <FiUpload />
+                              Change Background
+                            </button>
+
+                            {sidebarBackground && (
+                              <button
+                                type="button"
+                                className="remove-logo-button"
+                                onClick={removeSidebarBackground}
+                              >
+                                <FiTrash2 />
+                                Remove
+                              </button>
+                            )}
+
+                            <input
+                              ref={sidebarBackgroundInputRef}
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              className="logo-file-input"
+                              onChange={handleSidebarBackgroundChange}
+                            />
+                          </div>
+
+                          <small>
+                            JPG, PNG, or WebP up to 2.5 MB. Applied across all pages.
+                          </small>
+
+                        </div>
+
                       </div>
 
                     </section>
@@ -1769,9 +2142,9 @@ const Settings = () => {
                               }
                             >
 
-                              <option>
-                                Pacific/Efate (UTC+11:00)
-                              </option>
+                              <option value="Pacific/Efate (UTC+11:00)">Pacific/Efate (UTC+11:00)</option>
+                              <option value="Australia/Sydney (UTC+10:00)">Australia/Sydney (UTC+10:00)</option>
+                              <option value="Pacific/Auckland (UTC+12:00)">Pacific/Auckland (UTC+12:00)</option>
 
                             </select>
 
@@ -1804,13 +2177,9 @@ const Settings = () => {
                               }
                             >
 
-                              <option>
-                                DD/MM/YYYY (22/09/2026)
-                              </option>
-
-                              <option>
-                                DD/MM/YYYY
-                              </option>
+                              <option value="DD/MM/YYYY">DD/MM/YYYY (22/09/2026)</option>
+                              <option value="MM/DD/YYYY">MM/DD/YYYY (09/22/2026)</option>
+                              <option value="YYYY-MM-DD">YYYY-MM-DD (2026-09-22)</option>
 
                             </select>
 
@@ -1843,13 +2212,8 @@ const Settings = () => {
                               }
                             >
 
-                              <option>
-                                12-hour (AM/PM)
-                              </option>
-
-                              <option>
-                                24-hour
-                              </option>
+                              <option value="12-hour (AM/PM)">12-hour (AM/PM)</option>
+                              <option value="24-hour">24-hour</option>
 
                             </select>
 
@@ -1882,9 +2246,9 @@ const Settings = () => {
                               }
                             >
 
-                              <option>
-                                Vanuatu Vatu (VUV)
-                              </option>
+                              <option value="Vanuatu Vatu (VUV)">Vanuatu Vatu (VUV)</option>
+                              <option value="Australian Dollar (AUD)">Australian Dollar (AUD)</option>
+                              <option value="US Dollar (USD)">US Dollar (USD)</option>
 
                             </select>
 
@@ -1916,9 +2280,9 @@ const Settings = () => {
                               }
                             >
 
-                              <option>
-                                🇬🇧 English
-                              </option>
+                              <option value="English">English</option>
+                              <option value="Bislama">Bislama</option>
+                              <option value="French">French</option>
 
                             </select>
 
@@ -2294,11 +2658,38 @@ const Settings = () => {
                   </div>
 
 
-                  <div className="settings-form">
+                  <form className="settings-form account-profile-form" onSubmit={saveProfile}>
+
+                    <div className="profile-picture-editor">
+                      <div className="profile-picture-preview">
+                        {profileForm.avatarUrl ? (
+                          <img src={profileForm.avatarUrl} alt="Profile" />
+                        ) : (
+                          <FiUser />
+                        )}
+                      </div>
+                      <div>
+                        <strong>Profile picture</strong>
+                        <span>PNG, JPG, or WebP up to 1.5 MB</span>
+                        <div className="profile-picture-actions">
+                          <button type="button" className="admin-primary-button" onClick={() => profilePictureInputRef.current?.click()}>
+                            <FiUpload />
+                            Change Picture
+                          </button>
+                          {profileForm.avatarUrl && (
+                            <button type="button" className="remove-logo-button" onClick={() => setProfileForm((current) => ({ ...current, avatarUrl: "" }))}>
+                              <FiTrash2 />
+                              Remove
+                            </button>
+                          )}
+                          <input ref={profilePictureInputRef} className="logo-file-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={handleProfilePictureChange} />
+                        </div>
+                      </div>
+                    </div>
 
                     <div className="settings-field">
 
-                      <label>
+                      <label htmlFor="profileUsername">
                         Username
                       </label>
 
@@ -2307,12 +2698,11 @@ const Settings = () => {
                         <FiUser />
 
                         <input
+                          id="profileUsername"
                           type="text"
-                          value={
-                            user.username ||
-                            "Not available"
-                          }
-                          disabled
+                          value={profileForm.username}
+                          onChange={(event) => setProfileForm((current) => ({ ...current, username: event.target.value }))}
+                          required
                         />
 
                       </div>
@@ -2322,7 +2712,7 @@ const Settings = () => {
 
                     <div className="settings-field">
 
-                      <label>
+                      <label htmlFor="profileEmail">
                         Email Address
                       </label>
 
@@ -2331,12 +2721,11 @@ const Settings = () => {
                         <FiUser />
 
                         <input
+                          id="profileEmail"
                           type="email"
-                          value={
-                            user.email ||
-                            "Not available"
-                          }
-                          disabled
+                          value={profileForm.email}
+                          onChange={(event) => setProfileForm((current) => ({ ...current, email: event.target.value }))}
+                          required
                         />
 
                       </div>
@@ -2388,7 +2777,14 @@ const Settings = () => {
 
                     </div>
 
-                  </div>
+                    <div className="account-profile-actions">
+                      <button type="submit" className="save-password-button" disabled={loading}>
+                        <FiSave />
+                        {loading ? "Saving Profile..." : "Save Profile"}
+                      </button>
+                    </div>
+
+                  </form>
 
                 </div>
 
@@ -3082,7 +3478,21 @@ const Settings = () => {
                               {adminUsers.map((userRecord) => (
                                 <tr key={userRecord.id}>
                                   <td><strong>{userRecord.username}</strong><span>{userRecord.email}</span></td>
-                                  <td>{userRecord.role}</td>
+                                  <td>
+                                    <select
+                                      className="admin-role-select"
+                                      value={userRecord.roleId}
+                                      disabled={String(userRecord.id) === String(user.id)}
+                                      onChange={(event) => updateUserRole(userRecord, event.target.value)}
+                                      aria-label={`Role for ${userRecord.username}`}
+                                    >
+                                      {adminRoles.map((role) => (
+                                        <option key={role.id} value={role.id}>
+                                          {role.role}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </td>
                                   <td><span className={`admin-status ${userRecord.isActive ? "active" : "inactive"}`}>{userRecord.isActive ? "Active" : "Disabled"}</span></td>
                                   <td><button type="button" className="admin-text-button" onClick={() => toggleUserStatus(userRecord)}>{userRecord.isActive ? "Disable" : "Enable"}</button></td>
                                 </tr>

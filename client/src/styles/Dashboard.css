@@ -12,6 +12,7 @@
   flex-direction: row;
 
   background: #061331;
+  background-attachment: fixed;
 
   color: #ffffff;
 
@@ -47,7 +48,7 @@
 
   background: #061331;
 
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 
