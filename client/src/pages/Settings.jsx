@@ -44,6 +44,11 @@ import "../styles/Settings.css";
 
 import { buildApiUrl } from "../config/api";
 import { getAuthHeaders } from "../utils/auth";
+import {
+  deleteSidebarBackground,
+  loadSidebarBackground,
+  saveSidebarBackground,
+} from "../utils/sidebarBackgroundStorage";
 
 
 const Settings = () => {
@@ -125,8 +130,42 @@ const Settings = () => {
 
   const logoInputRef = useRef(null);
   const sidebarBackgroundInputRef = useRef(null);
+  const sidebarBackgroundUrlRef = useRef("");
+  const sidebarBackgroundRevisionRef = useRef(0);
   const profilePictureInputRef = useRef(null);
   const backupInputRef = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    const revision = sidebarBackgroundRevisionRef.current;
+
+    const loadSavedBackground = async () => {
+      try {
+        const image = await loadSidebarBackground();
+
+        if (!active || !image || revision !== sidebarBackgroundRevisionRef.current) {
+          return;
+        }
+
+        const imageUrl = URL.createObjectURL(image);
+        sidebarBackgroundUrlRef.current = imageUrl;
+        setSidebarBackground(imageUrl);
+      } catch {
+        // Keep any previously saved localStorage image as the fallback.
+      }
+    };
+
+    loadSavedBackground();
+
+    return () => {
+      active = false;
+
+      if (sidebarBackgroundUrlRef.current) {
+        URL.revokeObjectURL(sidebarBackgroundUrlRef.current);
+        sidebarBackgroundUrlRef.current = "";
+      }
+    };
+  }, []);
 
   const [attendanceSettings, setAttendanceSettings] = useState(() => {
     try {
@@ -167,6 +206,46 @@ const Settings = () => {
       return { annual: true, medical: true, other: true };
     }
   });
+
+  const [publicHolidays, setPublicHolidays] = useState([]);
+  const [holidayDate, setHolidayDate] = useState("");
+  const [holidayName, setHolidayName] = useState("");
+  const [holidaysLoading, setHolidaysLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadPublicHolidays = async () => {
+      try {
+        const response = await fetch(buildApiUrl("/holidays"), {
+          headers: getAuthHeaders(),
+        });
+        const data = await response.json();
+
+        if (!response.ok || !Array.isArray(data)) {
+          throw new Error(data.message || "Unable to load public holidays.");
+        }
+
+        if (active) {
+          setPublicHolidays(data);
+        }
+      } catch (error) {
+        if (active) {
+          setErrorMessage(error.message || "Unable to load public holidays.");
+        }
+      } finally {
+        if (active) {
+          setHolidaysLoading(false);
+        }
+      }
+    };
+
+    loadPublicHolidays();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const [backupMessage, setBackupMessage] = useState("");
 
@@ -922,38 +1001,115 @@ const Settings = () => {
     setErrorMessage("");
   };
 
-  const handleSidebarBackgroundChange = (event) => {
+  const handleSidebarBackgroundChange = async (event) => {
     const file = event.target.files?.[0];
 
     if (!file || !file.type.startsWith("image/")) {
       setErrorMessage("Please choose a valid sidebar background image.");
+      event.target.value = "";
       return;
     }
 
-    if (file.size > 2_500_000) {
-      setErrorMessage("Sidebar background images must be smaller than 2.5 MB.");
-      return;
-    }
+    sidebarBackgroundRevisionRef.current += 1;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const image = String(reader.result);
-      setSidebarBackground(image);
-      localStorage.setItem("sidebar-background", image);
-      window.dispatchEvent(new Event("sidebar-background-changed"));
+    try {
+      await saveSidebarBackground(file);
+      localStorage.removeItem("sidebar-background");
+
+      if (sidebarBackgroundUrlRef.current) {
+        URL.revokeObjectURL(sidebarBackgroundUrlRef.current);
+      }
+
+      const imageUrl = URL.createObjectURL(file);
+      sidebarBackgroundUrlRef.current = imageUrl;
+      setSidebarBackground(imageUrl);
+      window.dispatchEvent(
+        new CustomEvent("sidebar-background-changed", {
+          detail: { image: file },
+        })
+      );
       setSuccessMessage("Sidebar background updated successfully.");
       setErrorMessage("");
-    };
-    reader.readAsDataURL(file);
-    event.target.value = "";
+    } catch {
+      setErrorMessage("Unable to save this image in browser storage. Try a smaller image or free up browser storage.");
+    } finally {
+      event.target.value = "";
+    }
   };
 
-  const removeSidebarBackground = () => {
-    setSidebarBackground("");
-    localStorage.removeItem("sidebar-background");
-    window.dispatchEvent(new Event("sidebar-background-changed"));
-    setSuccessMessage("Sidebar background restored to the default.");
-    setErrorMessage("");
+  const removeSidebarBackground = async () => {
+    sidebarBackgroundRevisionRef.current += 1;
+
+    try {
+      await deleteSidebarBackground();
+      localStorage.removeItem("sidebar-background");
+
+      if (sidebarBackgroundUrlRef.current) {
+        URL.revokeObjectURL(sidebarBackgroundUrlRef.current);
+        sidebarBackgroundUrlRef.current = "";
+      }
+
+      setSidebarBackground("");
+      window.dispatchEvent(
+        new CustomEvent("sidebar-background-changed", {
+          detail: { removed: true },
+        })
+      );
+      setSuccessMessage("Sidebar background restored to the default.");
+      setErrorMessage("");
+    } catch {
+      setErrorMessage("Unable to remove the sidebar background from browser storage.");
+    }
+  };
+
+  const handleAddPublicHoliday = async (event) => {
+    event.preventDefault();
+
+    try {
+      const response = await fetch(buildApiUrl("/holidays"), {
+        method: "POST",
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ date: holidayDate, name: holidayName }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to save public holiday.");
+      }
+
+      setPublicHolidays((current) =>
+        [...current, data].sort((left, right) => left.date.localeCompare(right.date))
+      );
+      setHolidayDate("");
+      setHolidayName("");
+      setSuccessMessage("Public holiday added to the leave calendar.");
+      setErrorMessage("");
+    } catch (error) {
+      setErrorMessage(error.message || "Unable to save public holiday.");
+    }
+  };
+
+  const handleRemovePublicHoliday = async (holidayId) => {
+    try {
+      const response = await fetch(buildApiUrl(`/holidays/${holidayId}`), {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to remove public holiday.");
+      }
+
+      setPublicHolidays((current) => current.filter((holiday) => holiday.id !== holidayId));
+      setSuccessMessage("Public holiday removed from the leave calendar.");
+      setErrorMessage("");
+    } catch (error) {
+      setErrorMessage(error.message || "Unable to remove public holiday.");
+    }
   };
 
   const handleSearchKeyDown = (event) => {
@@ -2075,14 +2231,14 @@ const Settings = () => {
                             <input
                               ref={sidebarBackgroundInputRef}
                               type="file"
-                              accept="image/png,image/jpeg,image/webp"
+                              accept="image/*"
                               className="logo-file-input"
                               onChange={handleSidebarBackgroundChange}
                             />
                           </div>
 
                           <small>
-                            JPG, PNG, or WebP up to 2.5 MB. Applied across all pages.
+                            Choose any image. Stored in this browser and applied across all pages.
                           </small>
 
                         </div>
@@ -3390,6 +3546,79 @@ const Settings = () => {
                     </button>
 
                   </div>
+
+                  <section className="public-holidays-settings">
+                    <div className="public-holidays-heading">
+                      <div>
+                        <h3>Vanuatu Public Holidays</h3>
+                        <p>
+                          These dates are excluded from working-day calculations and annual leave usage.
+                        </p>
+                      </div>
+                      <span>{publicHolidays.length} dates</span>
+                    </div>
+
+                    {["system_admin", "hr"].includes(String(user.role).toLowerCase()) && (
+                      <form className="public-holiday-form" onSubmit={handleAddPublicHoliday}>
+                        <input
+                          type="date"
+                          value={holidayDate}
+                          onChange={(event) => setHolidayDate(event.target.value)}
+                          aria-label="Public holiday date"
+                          required
+                        />
+                        <input
+                          type="text"
+                          value={holidayName}
+                          onChange={(event) => setHolidayName(event.target.value)}
+                          placeholder="Holiday name"
+                          aria-label="Public holiday name"
+                          maxLength={150}
+                          required
+                        />
+                        <button type="submit" className="public-holiday-add-button">
+                          <FiCalendar /> Add holiday
+                        </button>
+                      </form>
+                    )}
+
+                    <div className="public-holidays-list" aria-live="polite">
+                      {holidaysLoading ? (
+                        <p className="public-holidays-empty">Loading public holidays...</p>
+                      ) : publicHolidays.length === 0 ? (
+                        <p className="public-holidays-empty">No public holidays found.</p>
+                      ) : (
+                        publicHolidays.map((holiday) => (
+                          <div className="public-holiday-row" key={holiday.id}>
+                            <div>
+                              <strong>{holiday.name}</strong>
+                              <span>
+                                {new Date(`${holiday.date}T00:00:00`).toLocaleDateString("en-GB", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })}
+                              </span>
+                            </div>
+                            <span className="public-holiday-source">
+                              {holiday.isGenerated ? "Vanuatu calendar" : "Added manually"}
+                            </span>
+                            {["system_admin", "hr"].includes(String(user.role).toLowerCase()) && (
+                              <button
+                                type="button"
+                                className="public-holiday-remove-button"
+                                onClick={() => handleRemovePublicHoliday(holiday.id)}
+                                aria-label={`Remove ${holiday.name}`}
+                                title="Remove holiday"
+                              >
+                                <FiTrash2 />
+                              </button>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </section>
 
                 </div>
 

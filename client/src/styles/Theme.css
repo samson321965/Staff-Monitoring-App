@@ -1,0 +1,170 @@
+:root {
+	--app-font: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+	--app-canvas:
+		linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 38%),
+		linear-gradient(115deg, #ffe84d 0%, #ffeb55 58%, #ffdf3d 100%);
+	--app-yellow: #facc00;
+	--app-yellow-hover: #e9b900;
+	--app-ink: #172554;
+	--app-text: #1f2937;
+	--app-muted: #64748b;
+	--app-border: #dce2eb;
+	--app-surface: #ffffff;
+	--app-surface-soft: #fbfcfe;
+	--app-shadow: 0 3px 10px rgba(92, 77, 0, 0.08);
+	--app-radius-sm: 6px;
+	--app-radius: 8px;
+}
+
+.dashboard-layout,
+.employees-layout,
+.attendance-layout,
+.leave-layout,
+.reports-page,
+.settings-page,
+.share-page {
+	background: var(--app-canvas);
+	color: var(--app-text);
+	font-family: var(--app-font);
+}
+
+.dashboard-layout,
+.employees-layout,
+.attendance-layout,
+.leave-layout,
+.reports-page,
+.settings-page {
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.dashboard-stat-card,
+.dashboard-panel,
+.employees-stat-card,
+.employees-table-container,
+.attendance-stat-card,
+.attendance-table-container,
+.leave-stat-card,
+.leave-table-container,
+.report-summary-card,
+.report-panel,
+.settings-box,
+.settings-panel,
+.login-card,
+.share-panel {
+	border-color: var(--app-border);
+	border-radius: var(--app-radius);
+	box-shadow: var(--app-shadow);
+}
+
+.dashboard-title-text h1,
+.employees-title-text h1,
+.attendance-title-text h1,
+.leave-title-text h1,
+.reports-title h1,
+.settings-header h1 {
+	color: var(--app-ink);
+	font-family: var(--app-font);
+	letter-spacing: 0;
+}
+
+.add-employee-btn,
+.add-attendance-btn,
+.add-leave-btn,
+.export-button,
+.generate-report-button,
+.login-btn,
+.admin-primary-button {
+	border-color: transparent;
+	border-radius: var(--app-radius-sm);
+	background: var(--app-yellow);
+	color: var(--app-ink);
+	font-family: var(--app-font);
+	box-shadow: 0 2px 7px rgba(92, 77, 0, 0.1);
+}
+
+.add-employee-btn:hover,
+.add-attendance-btn:hover,
+.add-leave-btn:hover,
+.export-button:hover,
+.generate-report-button:hover,
+.login-btn:hover,
+.admin-primary-button:hover {
+	background: var(--app-yellow-hover);
+}
+
+.refresh-employees-btn,
+.refresh-attendance-btn,
+.refresh-btn,
+.dashboard-refresh-btn,
+.date-display {
+	border-color: var(--app-border);
+	border-radius: var(--app-radius-sm);
+	background: var(--app-surface);
+	color: var(--app-text);
+	font-family: var(--app-font);
+}
+
+.employees-layout input,
+.employees-layout select,
+.attendance-layout input,
+.attendance-layout select,
+.leave-layout input,
+.leave-layout select,
+.reports-page input,
+.reports-page select,
+.settings-page input,
+.settings-page select,
+.login-container input {
+	font-family: var(--app-font);
+}
+
+.employees-layout input:focus-visible,
+.employees-layout select:focus-visible,
+.attendance-layout input:focus-visible,
+.attendance-layout select:focus-visible,
+.leave-layout input:focus-visible,
+.leave-layout select:focus-visible,
+.reports-page input:focus-visible,
+.reports-page select:focus-visible,
+.settings-page input:focus-visible,
+.settings-page select:focus-visible,
+.login-container input:focus-visible {
+	outline: 2px solid rgba(217, 185, 79, 0.55);
+	outline-offset: 2px;
+}
+
+.sidebar li a,
+.sidebar li button.logout-button {
+	min-height: 34px;
+	border-radius: var(--app-radius-sm);
+	font-family: var(--app-font);
+	font-size: 10px;
+	line-height: 1.2;
+}
+
+.sidebar li a svg,
+.sidebar li button.logout-button svg {
+	width: 13px;
+	height: 13px;
+	min-width: 13px;
+	font-size: 12px;
+}
+
+.sidebar-logo h2 {
+	font-family: var(--app-font);
+	font-size: 12px;
+}
+
+.sidebar-logo p,
+.logo-text span {
+	font-size: 8px;
+}
+
+@media (max-width: 768px) {
+	.sidebar li a,
+	.sidebar li button.logout-button {
+		min-height: 32px;
+		font-size: 9px;
+	}
+}

@@ -12,6 +12,7 @@ FaSignOutAlt
 } from "react-icons/fa";
 
 import logo from "../assets/images/logo.png";
+import { loadSidebarBackground } from "../utils/sidebarBackgroundStorage";
 
 function Sidebar() {
   const navigate = useNavigate();
@@ -20,12 +21,65 @@ function Sidebar() {
     );
 
     useEffect(() => {
-        const refreshBackground = () => {
-            setBackgroundImage(localStorage.getItem("sidebar-background") || "");
+        let requestVersion = 0;
+        let objectUrl = "";
+
+        const applyImage = (image) => {
+            if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+            }
+
+            objectUrl = URL.createObjectURL(image);
+            setBackgroundImage(objectUrl);
+        };
+
+        const refreshBackground = async (event) => {
+            const currentRequest = ++requestVersion;
+
+            if (event?.detail?.removed) {
+                if (objectUrl) {
+                    URL.revokeObjectURL(objectUrl);
+                    objectUrl = "";
+                }
+
+                setBackgroundImage("");
+                return;
+            }
+
+            if (event?.detail?.image) {
+                applyImage(event.detail.image);
+                return;
+            }
+
+            try {
+                const image = await loadSidebarBackground();
+
+                if (currentRequest !== requestVersion) {
+                    return;
+                }
+
+                if (image) {
+                    applyImage(image);
+                } else {
+                    setBackgroundImage(localStorage.getItem("sidebar-background") || "");
+                }
+            } catch {
+                if (currentRequest === requestVersion) {
+                    setBackgroundImage(localStorage.getItem("sidebar-background") || "");
+                }
+            }
         };
 
         window.addEventListener("sidebar-background-changed", refreshBackground);
-        return () => window.removeEventListener("sidebar-background-changed", refreshBackground);
+        refreshBackground();
+
+        return () => {
+            window.removeEventListener("sidebar-background-changed", refreshBackground);
+
+            if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
     }, []);
 
   const handleLogout = () => {

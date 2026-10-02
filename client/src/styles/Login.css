@@ -1,110 +1,146 @@
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-    font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
+/* =========================================================
+   VEO STAFF MONITORING SYSTEM
+   LOGIN PAGE
+   ========================================================= */
 
-body{
-    background:linear-gradient(135deg,#0f172a,#2563eb);
-}
+/* =========================================================
+   LOGIN CONTAINER
+   ========================================================= */
 
-#root{
-    width:100%;
-    min-height:100vh;
-}
-
-.login-container{
-    width:100%;
-    min-height:100vh;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-
+.login-container {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+    font-size: 12px;
+    line-height: 1.4;
     background:
-        linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)),
+        linear-gradient(125deg, rgba(255, 232, 77, 0.88), rgba(255, 235, 85, 0.84)),
         url("../assets/images/login-bg.png");
-
-    background-size: 100% 100%, 320px auto;
-    background-position:center;
-    background-repeat:no-repeat;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
 }
 
-.login-card{
-    width:420px;
-    padding:40px;
-    border-radius:20px;
+/* =========================================================
+   LOGIN CARD
+   ========================================================= */
 
-    background: rgba(255, 255, 255, 0.15);
-
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-
-    border: 1px solid rgba(255, 255, 255, 0.3);
-
-    box-shadow: 0 15px 35px rgba(0,0,0,.35);
+.login-card {
+    width: min(390px, 100%);
+    padding: 30px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius);
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 12px 32px rgba(92, 77, 0, 0.16);
 }
 
-.login-card h1{
-    text-align:center;
-    color:#ffffff;
-    margin-bottom:10px;
+/* =========================================================
+   LOGIN TITLE
+   ========================================================= */
+
+.login-card h1 {
+    text-align: center;
+    color: var(--app-ink);
+    margin: 0 0 5px;
+    font-size: 23px;
+    line-height: 1.25;
 }
 
-.login-card p{
-    text-align:center;
-    color:#f1f5f9;
-    margin-bottom:25px;
+.login-card h1 svg {
+    color: var(--app-ink) !important;
 }
 
-.input-group{
-    position:relative;
-    margin-bottom:20px;
+/* =========================================================
+   LOGIN DESCRIPTION
+   ========================================================= */
+
+.login-card p {
+    text-align: center;
+    color: var(--app-muted);
+    margin-bottom: 20px;
+    font-size: 11px;
 }
 
-.input-icon{
-    position:absolute;
-    left:15px;
-    top:50%;
-    transform:translateY(-50%);
-    color:#2563eb;
-    font-size:18px;
+/* =========================================================
+   INPUT GROUP
+   ========================================================= */
+
+.input-group {
+    position: relative;
+    margin-bottom: 14px;
 }
 
-.input-group input{
-    width:100%;
-    padding:15px 15px 15px 45px;
-    border:1px solid #d1d5db;
-    border-radius:10px;
-    font-size:16px;
-    transition:.3s;
+/* =========================================================
+   INPUT ICON
+   ========================================================= */
+
+.input-icon {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #b98b00;
+    font-size: 15px;
 }
 
-.input-group input:focus{
-    outline:none;
-    border-color:#2563eb;
-    box-shadow:0 0 8px rgba(37,99,235,.25);
+/* =========================================================
+   INPUT
+   ========================================================= */
+
+.input-group input {
+    width: 100%;
+    min-height: 39px;
+    padding: 10px 11px 10px 40px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-sm);
+    background: var(--app-surface);
+    color: var(--app-text);
+    font-size: 11px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.login-btn{
-    width:100%;
-    padding:15px;
-    background:#2563eb;
-    color:#fff;
-    border:none;
-    border-radius:10px;
-    font-size:16px;
-    cursor:pointer;
-    transition:.3s;
+.input-group input::placeholder {
+    color: #94a3b8;
 }
 
-.login-btn:hover{
-    background:#1d4ed8;
+.input-group input:focus {
+    outline: none;
+    border-color: var(--app-yellow-hover);
+    box-shadow: 0 0 0 3px rgba(217, 185, 79, 0.18);
 }
 
-.footer-text{
-    margin-top:20px;
-    text-align:center;
-    font-size:14px;
-    color:#f1f5f9;
+/* =========================================================
+   LOGIN BUTTON
+   ========================================================= */
+
+.login-btn {
+    width: 100%;
+    min-height: 38px;
+    padding: 9px 14px;
+    border: none;
+    border-radius: var(--app-radius-sm);
+    background: var(--app-yellow);
+    color: var(--app-ink);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.login-btn:hover {
+    background: var(--app-yellow-hover);
+}
+
+/* =========================================================
+   FOOTER TEXT
+   ========================================================= */
+
+.footer-text {
+    margin: 16px 0 0 !important;
+    text-align: center;
+    font-size: 9px !important;
+    color: #718096 !important;
 }

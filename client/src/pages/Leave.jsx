@@ -14,6 +14,8 @@ import {
   FaTimes,
   FaPlus,
   FaChevronDown,
+  FaPaperclip,
+  FaDownload,
 } from "react-icons/fa";
 
 import Sidebar from "../components/Sidebar";
@@ -26,8 +28,6 @@ import { getAuthHeaders } from "../utils/auth";
 // API URL
 // ======================================================
 
-// Remove trailing slash from buildApiUrl()
-// so we never create /api//leaves
 const API_URL = buildApiUrl().replace(/\/+$/, "");
 const LEAVES_URL = `${API_URL}/leaves`;
 
@@ -36,6 +36,8 @@ console.log("Leave API URL:", LEAVES_URL);
 // ======================================================
 // LEAVE TYPES
 // ======================================================
+
+const ANNUAL_LEAVE_ALLOWANCE = 24;
 
 const LEAVE_TYPES = [
   "Annual Leave",
@@ -100,10 +102,26 @@ const formatDate = (value) => {
 };
 
 // ======================================================
-// CALCULATE WORKING DAYS
+// LOCAL TODAY DATE
+// Avoid UTC / toISOString() date shifting
 // ======================================================
 
-const calculateWorkingDays = (start, end) => {
+const getTodayLocalDate = () => {
+  const today = new Date();
+
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+// ======================================================
+// CALCULATE WORKING DAYS
+// Monday - Friday only
+// ======================================================
+
+const calculateWorkingDays = (start, end, holidayDates = new Set()) => {
   if (!start || !end) return 0;
 
   const startDate = new Date(`${start}T00:00:00`);
@@ -123,7 +141,13 @@ const calculateWorkingDays = (start, end) => {
   while (current <= endDate) {
     const day = current.getDay();
 
-    if (day !== 0 && day !== 6) {
+    const dateKey = [
+      current.getFullYear(),
+      String(current.getMonth() + 1).padStart(2, "0"),
+      String(current.getDate()).padStart(2, "0"),
+    ].join("-");
+
+    if (day !== 0 && day !== 6 && !holidayDates.has(dateKey)) {
       count++;
     }
 
@@ -131,6 +155,163 @@ const calculateWorkingDays = (start, end) => {
   }
 
   return count;
+};
+
+// ======================================================
+// NORMALIZE STATUS
+// ======================================================
+
+const normalizeStatus = (status) => {
+  return String(status || "")
+    .trim()
+    .toLowerCase();
+};
+
+// ======================================================
+// NORMALIZE LEAVE TYPE
+// ======================================================
+
+const normalizeLeaveType = (leaveType) => {
+  return String(leaveType || "")
+    .trim()
+    .toLowerCase();
+};
+
+// ======================================================
+// GET LEAVE EMPLOYEE ID
+// Handles different API field names
+// ======================================================
+
+const getLeaveEmployeeId = (item) => {
+  return (
+    item.employee_id ??
+    item.employeeId ??
+    item.employeeIdNumber ??
+    item.employee_id_number ??
+    ""
+  );
+};
+
+// ======================================================
+// GET LEAVE DAYS
+// Handles different API field names
+// ======================================================
+
+const getLeaveDays = (item) => {
+  const days = Number(
+    item.days ??
+      item.total_working_days ??
+      item.totalWorkingDays ??
+      0
+  );
+
+  return Number.isFinite(days) ? days : 0;
+};
+
+// ======================================================
+// FORMAT FILE SIZE
+// ======================================================
+
+const formatFileSize = (bytes) => {
+  const size = Number(bytes || 0);
+
+  if (!size) {
+    return "";
+  }
+
+  if (size < 1024) {
+    return `${size} B`;
+  }
+
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+};
+
+// ======================================================
+// GET ATTACHMENT NAME
+// Supports different backend field names
+// ======================================================
+
+const getAttachmentName = (item) => {
+  return (
+    item.attachmentName ??
+    item.attachment_name ??
+    item.fileName ??
+    item.file_name ??
+    ""
+  );
+};
+
+// ======================================================
+// GET ATTACHMENT SIZE
+// ======================================================
+
+const getAttachmentSize = (item) => {
+  return (
+    item.attachmentSize ??
+    item.attachment_size ??
+    item.fileSize ??
+    item.file_size ??
+    0
+  );
+};
+
+// ======================================================
+// CHECK WHETHER ATTACHMENT EXISTS
+// ======================================================
+
+const hasAttachment = (item) => {
+  const attachmentName = getAttachmentName(item);
+
+  return (
+    Boolean(
+      item.hasAttachment ??
+        item.has_attachment ??
+        false
+    ) ||
+    Boolean(attachmentName)
+  );
+};
+
+// ======================================================
+// GET AUTH HEADERS FOR FILE REQUESTS
+//
+// IMPORTANT:
+// getAuthHeaders() normally returns:
+// Content-Type: application/json
+//
+// That is correct for JSON requests but NOT for
+// attachment/blob requests.
+//
+// We keep Authorization but remove Content-Type.
+// ======================================================
+
+const getFileAuthHeaders = () => {
+  const headers = {
+    ...getAuthHeaders(),
+  };
+
+  delete headers["Content-Type"];
+  delete headers["content-type"];
+
+  return headers;
+};
+
+// ======================================================
+// GET ATTACHMENT URL
+//
+// The attachment is stored in PostgreSQL BYTEA, so it
+// does not normally have a normal file URL.
+//
+// The backend endpoint is:
+// GET /api/leaves/:id/attachment
+// ======================================================
+
+const getAttachmentEndpoint = (leaveId) => {
+  return `${LEAVES_URL}/${leaveId}/attachment`;
 };
 
 // ======================================================
@@ -143,12 +324,16 @@ const Leave = () => {
   // ====================================================
 
   const [searchTerm, setSearchTerm] = useState("");
+
   const [department, setDepartment] =
     useState("All Departments");
+
   const [leaveType, setLeaveType] =
     useState("All Types");
+
   const [status, setStatus] =
     useState("All Status");
+
   const [dateFilter, setDateFilter] =
     useState("All Dates");
 
@@ -157,7 +342,19 @@ const Leave = () => {
   // ====================================================
 
   const [leaveData, setLeaveData] = useState([]);
+
   const [employees, setEmployees] = useState([]);
+
+  const [publicHolidays, setPublicHolidays] = useState([]);
+
+  const [holidaysLoaded, setHolidaysLoaded] = useState(false);
+
+  const [holidayLoadError, setHolidayLoadError] = useState("");
+
+  const holidayDates = useMemo(
+    () => new Set(publicHolidays.map((holiday) => String(holiday.date).slice(0, 10))),
+    [publicHolidays]
+  );
 
   const [selectedLeave, setSelectedLeave] =
     useState(null);
@@ -172,22 +369,141 @@ const Leave = () => {
   const [formData, setFormData] =
     useState(EMPTY_FORM);
 
+  useEffect(() => {
+    setFormData((current) => ({
+      ...current,
+      total_working_days: calculateWorkingDays(
+        current.start_date,
+        current.end_date,
+        holidayDates
+      ),
+    }));
+  }, [holidayDates]);
+
+  // ====================================================
+  // ATTACHMENT STATE
+  // ====================================================
+
+  const [attachment, setAttachment] =
+    useState(null);
+
+  // ====================================================
+  // ATTACHMENT ACTION STATE
+  // ====================================================
+
+  const [attachmentLoadingId, setAttachmentLoadingId] =
+    useState(null);
+
   // ====================================================
   // LOADING STATES
   // ====================================================
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
+
   const [employeesLoading, setEmployeesLoading] =
     useState(false);
-  const [saving, setSaving] = useState(false);
+
+  const [saving, setSaving] =
+    useState(false);
 
   // ====================================================
   // MESSAGE STATES
   // ====================================================
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
+
   const [successMessage, setSuccessMessage] =
     useState("");
+
+  // ====================================================
+  // ANNUAL LEAVE USED
+  //
+  // Approved + Pending = used/reserved days
+  // Rejected = does not reduce balance
+  // ====================================================
+
+  const annualLeaveUsed = useMemo(() => {
+    if (!formData.employee_id) {
+      return 0;
+    }
+
+    const selectedEmployeeId =
+      String(formData.employee_id);
+
+    return leaveData.reduce(
+      (total, item) => {
+        const itemEmployeeId =
+          String(
+            getLeaveEmployeeId(item)
+          );
+
+        const itemLeaveType =
+          normalizeLeaveType(
+            item.leaveType ??
+              item.leave_type
+          );
+
+        const currentStatus =
+          normalizeStatus(
+            item.status
+          );
+
+        if (
+          itemLeaveType !==
+          "annual leave"
+        ) {
+          return total;
+        }
+
+        if (
+          itemEmployeeId !==
+          selectedEmployeeId
+        ) {
+          return total;
+        }
+
+        if (
+          currentStatus ===
+            "rejected" ||
+          currentStatus ===
+            "cancelled"
+        ) {
+          return total;
+        }
+
+        if (
+          currentStatus !==
+            "approved" &&
+          currentStatus !==
+            "pending"
+        ) {
+          return total;
+        }
+
+        return (
+          total +
+          getLeaveDays(item)
+        );
+      },
+      0
+    );
+  }, [
+    leaveData,
+    formData.employee_id,
+  ]);
+
+  // ====================================================
+  // ANNUAL LEAVE BALANCE
+  // ====================================================
+
+  const annualLeaveBalance =
+    Math.max(
+      0,
+      ANNUAL_LEAVE_ALLOWANCE -
+        annualLeaveUsed
+    );
 
   // ====================================================
   // LOAD LEAVE REQUESTS
@@ -203,17 +519,23 @@ const Leave = () => {
         LEAVES_URL
       );
 
-      const response = await fetch(LEAVES_URL, {
-        method: "GET",
-        headers: getAuthHeaders(),
-      });
+      const response =
+        await fetch(
+          LEAVES_URL,
+          {
+            method: "GET",
+            headers:
+              getAuthHeaders(),
+          }
+        );
 
       console.log(
         "Leaves API status:",
         response.status
       );
 
-      const responseText = await response.text();
+      const responseText =
+        await response.text();
 
       console.log(
         "Leaves API response:",
@@ -224,7 +546,9 @@ const Leave = () => {
 
       try {
         data = responseText
-          ? JSON.parse(responseText)
+          ? JSON.parse(
+              responseText
+            )
           : {};
       } catch (parseError) {
         console.error(
@@ -245,7 +569,9 @@ const Leave = () => {
         );
       }
 
-      if (!Array.isArray(data)) {
+      if (
+        !Array.isArray(data)
+      ) {
         console.error(
           "Expected leave API to return an array:",
           data
@@ -257,6 +583,11 @@ const Leave = () => {
       }
 
       setLeaveData(data);
+
+      console.log(
+        "Leave records loaded:",
+        data
+      );
     } catch (err) {
       console.error(
         "Load leaves error:",
@@ -279,7 +610,6 @@ const Leave = () => {
   const loadEmployees = async () => {
     try {
       setEmployeesLoading(true);
-
       setError("");
 
       const employeesUrl =
@@ -290,13 +620,15 @@ const Leave = () => {
         employeesUrl
       );
 
-      const response = await fetch(
-        employeesUrl,
-        {
-          method: "GET",
-          headers: getAuthHeaders(),
-        }
-      );
+      const response =
+        await fetch(
+          employeesUrl,
+          {
+            method: "GET",
+            headers:
+              getAuthHeaders(),
+          }
+        );
 
       console.log(
         "Employees API status:",
@@ -315,7 +647,9 @@ const Leave = () => {
 
       try {
         data = responseText
-          ? JSON.parse(responseText)
+          ? JSON.parse(
+              responseText
+            )
           : {};
       } catch (parseError) {
         console.error(
@@ -336,7 +670,9 @@ const Leave = () => {
         );
       }
 
-      if (!Array.isArray(data)) {
+      if (
+        !Array.isArray(data)
+      ) {
         console.error(
           "Expected employees API to return an array:",
           data
@@ -364,47 +700,86 @@ const Leave = () => {
   };
 
   // ====================================================
+  // LOAD PUBLIC HOLIDAYS
+  // ====================================================
+
+  const loadPublicHolidays = async () => {
+    try {
+      const response = await fetch(
+        buildApiUrl("/holidays"),
+        { headers: getAuthHeaders() }
+      );
+      const data = await response.json();
+
+      if (!response.ok || !Array.isArray(data)) {
+        throw new Error(data.message || "Unable to load Vanuatu public holidays.");
+      }
+
+      setPublicHolidays(data);
+      setHolidayLoadError("");
+      setHolidaysLoaded(true);
+    } catch (loadError) {
+      setHolidayLoadError(
+        loadError.message || "Unable to load Vanuatu public holidays."
+      );
+      setHolidaysLoaded(false);
+    }
+  };
+
+  // ====================================================
   // INITIAL LOAD
   // ====================================================
 
   useEffect(() => {
     loadLeaves();
     loadEmployees();
+    loadPublicHolidays();
   }, []);
 
   // ====================================================
   // EMPLOYEE CHANGE
   // ====================================================
 
-  const handleEmployeeChange = (event) => {
+  const handleEmployeeChange = (
+    event
+  ) => {
     const employeeId =
       event.target.value;
 
     const selectedEmployee =
       employees.find(
         (employee) =>
-          String(employee.id) ===
+          String(
+            employee.id
+          ) ===
           String(employeeId)
       );
 
-    setFormData((current) => ({
-      ...current,
+    setFormData(
+      (current) => ({
+        ...current,
 
-      employee_id: employeeId,
+        employee_id:
+          employeeId,
 
-      work_location:
-        selectedEmployee?.workLocation || "",
+        work_location:
+          selectedEmployee?.workLocation ||
+          "",
 
-      supervisor_name:
-        selectedEmployee?.supervisor || "",
-    }));
+        supervisor_name:
+          selectedEmployee?.supervisor ||
+          "",
+      })
+    );
   };
 
   // ====================================================
   // FORM CHANGE
   // ====================================================
 
-  const handleFormChange = (event) => {
+  const handleFormChange = (
+    event
+  ) => {
     const {
       name,
       value,
@@ -412,40 +787,141 @@ const Leave = () => {
       checked,
     } = event.target;
 
-    setFormData((current) => ({
-      ...current,
+    setFormData(
+      (current) => ({
+        ...current,
 
-      [name]:
-        type === "checkbox"
-          ? checked
-          : value,
-    }));
+        [name]:
+          type === "checkbox"
+            ? checked
+            : value,
+      })
+    );
   };
 
   // ====================================================
   // DATE CHANGE
   // ====================================================
 
-  const handleDateChange = (event) => {
+  const handleDateChange = (
+    event
+  ) => {
     const {
       name,
       value,
     } = event.target;
 
-    setFormData((current) => {
-      const updated = {
-        ...current,
-        [name]: value,
-      };
+    setFormData(
+      (current) => {
+        const updated = {
+          ...current,
+          [name]: value,
+        };
 
-      updated.total_working_days =
-        calculateWorkingDays(
-          updated.start_date,
-          updated.end_date
-        );
+        updated.total_working_days =
+          calculateWorkingDays(
+            updated.start_date,
+            updated.end_date,
+            holidayDates
+          );
 
-      return updated;
-    });
+        return updated;
+      }
+    );
+  };
+
+  // ====================================================
+  // ATTACHMENT CHANGE
+  // ====================================================
+
+  const handleAttachmentChange = (
+    event
+  ) => {
+    const file =
+      event.target.files?.[0];
+
+    if (!file) {
+      setAttachment(null);
+      return;
+    }
+
+    const allowedTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+    ];
+
+    const allowedExtensions = [
+      ".pdf",
+      ".jpg",
+      ".jpeg",
+      ".png",
+    ];
+
+    const fileName =
+      String(
+        file.name || ""
+      ).toLowerCase();
+
+    const hasAllowedExtension =
+      allowedExtensions.some(
+        (extension) =>
+          fileName.endsWith(
+            extension
+          )
+      );
+
+    if (
+      !allowedTypes.includes(
+        file.type
+      ) &&
+      !hasAllowedExtension
+    ) {
+      setError(
+        "Please upload a PDF, JPG, JPEG, or PNG file."
+      );
+
+      event.target.value = "";
+      setAttachment(null);
+
+      return;
+    }
+
+    const maxSize =
+      5 * 1024 * 1024;
+
+    if (
+      file.size > maxSize
+    ) {
+      setError(
+        "The attachment must not be larger than 5 MB."
+      );
+
+      event.target.value = "";
+      setAttachment(null);
+
+      return;
+    }
+
+    setError("");
+    setAttachment(file);
+  };
+
+  // ====================================================
+  // REMOVE ATTACHMENT
+  // ====================================================
+
+  const removeAttachment = () => {
+    setAttachment(null);
+
+    const input =
+      document.getElementById(
+        "leave-attachment"
+      );
+
+    if (input) {
+      input.value = "";
+    }
   };
 
   // ====================================================
@@ -458,8 +934,20 @@ const Leave = () => {
 
     setFormData({
       ...EMPTY_FORM,
-      leave_type: "Annual Leave",
+      leave_type:
+        "Annual Leave",
     });
+
+    setAttachment(null);
+
+    const input =
+      document.getElementById(
+        "leave-attachment"
+      );
+
+    if (input) {
+      input.value = "";
+    }
 
     setShowAddModal(true);
   };
@@ -472,407 +960,901 @@ const Leave = () => {
     if (saving) return;
 
     setShowAddModal(false);
+
     setFormData({
       ...EMPTY_FORM,
     });
+
+    setAttachment(null);
+
+    const input =
+      document.getElementById(
+        "leave-attachment"
+      );
+
+    if (input) {
+      input.value = "";
+    }
   };
+
+  // ====================================================
+  // VIEW ATTACHMENT
+  //
+  // The file is stored as BYTEA in PostgreSQL.
+  // We request the file from:
+  //
+  // GET /api/leaves/:id/attachment
+  //
+  // The response is converted to a Blob and opened
+  // in a new browser tab.
+  // ====================================================
+
+  const handleViewAttachment = async (
+    leave
+  ) => {
+    if (!leave?.id) {
+      setError(
+        "Unable to identify the leave application."
+      );
+      return;
+    }
+
+    try {
+      setError("");
+      setSuccessMessage("");
+
+      if (!holidaysLoaded) {
+        setError(
+          holidayLoadError ||
+            "Vanuatu public holidays are still loading. Please try again."
+        );
+        return;
+      }
+      setAttachmentLoadingId(
+        `view-${leave.id}`
+      );
+
+      console.log(
+        "Viewing attachment for leave:",
+        leave.id
+      );
+
+      const response =
+        await fetch(
+          getAttachmentEndpoint(
+            leave.id
+          ),
+          {
+            method: "GET",
+            headers:
+              getFileAuthHeaders(),
+          }
+        );
+
+      console.log(
+        "View attachment response:",
+        response.status,
+        response.headers.get(
+          "content-type"
+        )
+      );
+
+      if (!response.ok) {
+        const responseText =
+          await response.text();
+
+        let data = {};
+
+        try {
+          data = responseText
+            ? JSON.parse(
+                responseText
+              )
+            : {};
+        } catch {
+          data = {};
+        }
+
+        throw new Error(
+          data.message ||
+            data.error ||
+            `Unable to view attachment. HTTP ${response.status}`
+        );
+      }
+
+      const blob =
+        await response.blob();
+
+      if (!blob.size) {
+        throw new Error(
+          "The attachment returned from the database is empty."
+        );
+      }
+
+      const blobUrl =
+        URL.createObjectURL(blob);
+
+      const newWindow =
+        window.open(
+          blobUrl,
+          "_blank",
+          "noopener,noreferrer"
+        );
+
+      if (!newWindow) {
+        const link =
+          document.createElement(
+            "a"
+          );
+
+        link.href = blobUrl;
+        link.target = "_blank";
+        link.rel =
+          "noopener noreferrer";
+
+        document.body.appendChild(
+          link
+        );
+
+        link.click();
+
+        link.remove();
+      }
+
+      // Give the browser enough time to load the blob
+      // before releasing the object URL.
+      setTimeout(() => {
+        URL.revokeObjectURL(
+          blobUrl
+        );
+      }, 60000);
+    } catch (err) {
+      console.error(
+        "View attachment error:",
+        err
+      );
+
+      setError(
+        err.message ||
+          "Unable to view the attachment."
+      );
+    } finally {
+      setAttachmentLoadingId(
+        null
+      );
+    }
+  };
+
+  // ====================================================
+  // DOWNLOAD ATTACHMENT
+  //
+  // The file is fetched from PostgreSQL and downloaded
+  // using the original attachment name.
+  // ====================================================
+
+  const handleDownloadAttachment =
+    async (leave) => {
+      if (!leave?.id) {
+        setError(
+          "Unable to identify the leave application."
+        );
+        return;
+      }
+
+      try {
+        setError("");
+        setSuccessMessage("");
+        setAttachmentLoadingId(
+          `download-${leave.id}`
+        );
+
+        console.log(
+          "Downloading attachment for leave:",
+          leave.id
+        );
+
+        const response =
+          await fetch(
+            getAttachmentEndpoint(
+              leave.id
+            ),
+            {
+              method: "GET",
+              headers:
+                getFileAuthHeaders(),
+            }
+          );
+
+        console.log(
+          "Download attachment response:",
+          response.status
+        );
+
+        if (!response.ok) {
+          const responseText =
+            await response.text();
+
+          let data = {};
+
+          try {
+            data = responseText
+              ? JSON.parse(
+                  responseText
+                )
+              : {};
+          } catch {
+            data = {};
+          }
+
+          throw new Error(
+            data.message ||
+              data.error ||
+              `Unable to download attachment. HTTP ${response.status}`
+          );
+        }
+
+        const blob =
+          await response.blob();
+
+        if (!blob.size) {
+          throw new Error(
+            "The attachment returned from the database is empty."
+          );
+        }
+
+        // Try to get the filename from Content-Disposition
+        const contentDisposition =
+          response.headers.get(
+            "content-disposition"
+          );
+
+        let fileName =
+          getAttachmentName(
+            leave
+          ) ||
+          `leave-attachment-${leave.id}`;
+
+        if (
+          contentDisposition
+        ) {
+          const utf8Match =
+            contentDisposition.match(
+              /filename\*=UTF-8''([^;]+)/i
+            );
+
+          const normalMatch =
+            contentDisposition.match(
+              /filename="?([^"]+)"?/i
+            );
+
+          if (utf8Match?.[1]) {
+            try {
+              fileName =
+                decodeURIComponent(
+                  utf8Match[1]
+                );
+            } catch {
+              fileName =
+                utf8Match[1];
+            }
+          } else if (
+            normalMatch?.[1]
+          ) {
+            fileName =
+              normalMatch[1];
+          }
+        }
+
+        const blobUrl =
+          URL.createObjectURL(
+            blob
+          );
+
+        const link =
+          document.createElement(
+            "a"
+          );
+
+        link.href = blobUrl;
+        link.download =
+          fileName;
+
+        document.body.appendChild(
+          link
+        );
+
+        link.click();
+
+        link.remove();
+
+        setTimeout(() => {
+          URL.revokeObjectURL(
+            blobUrl
+          );
+        }, 1000);
+
+        setSuccessMessage(
+          "Attachment downloaded successfully."
+        );
+      } catch (err) {
+        console.error(
+          "Download attachment error:",
+          err
+        );
+
+        setError(
+          err.message ||
+            "Unable to download the attachment."
+        );
+      } finally {
+        setAttachmentLoadingId(
+          null
+        );
+      }
+    };
 
   // ====================================================
   // SUBMIT LEAVE FORM
   // ====================================================
 
-  const handleSubmitLeave = async (event) => {
-    event.preventDefault();
+  const handleSubmitLeave =
+    async (event) => {
+      event.preventDefault();
 
-    setError("");
-    setSuccessMessage("");
+      setError("");
+      setSuccessMessage("");
 
-    // -----------------------------------------------
-    // Employee validation
-    // -----------------------------------------------
-
-    if (!formData.employee_id) {
-      setError(
-        "Please select an employee."
-      );
-      return;
-    }
-
-    // -----------------------------------------------
-    // Date validation
-    // -----------------------------------------------
-
-    if (
-      !formData.start_date ||
-      !formData.end_date
-    ) {
-      setError(
-        "Please enter the start date and end date."
-      );
-      return;
-    }
-
-    if (
-      new Date(
-        `${formData.end_date}T00:00:00`
-      ) <
-      new Date(
-        `${formData.start_date}T00:00:00`
-      )
-    ) {
-      setError(
-        "End date cannot be before start date."
-      );
-      return;
-    }
-
-    // -----------------------------------------------
-    // Sabbatical validation
-    // -----------------------------------------------
-
-    if (
-      formData.leave_type ===
-      "Sabbatical Leave"
-    ) {
       if (
-        !formData.purpose_justification.trim()
+        !formData.employee_id
       ) {
         setError(
-          "Please enter the purpose / justification."
+          "Please select an employee."
         );
-        return;
-      }
-    }
 
-    // -----------------------------------------------
-    // Secondment validation
-    // -----------------------------------------------
-
-    if (
-      formData.leave_type ===
-        "Secondment" ||
-      formData.leave_type ===
-        "Study Leave"
-    ) {
-      if (
-        !formData.purpose_justification.trim()
-      ) {
-        setError(
-          "Please enter the purpose / justification."
-        );
-        return;
-      }
-    }
-
-    // -----------------------------------------------
-    // Study leave validation
-    // -----------------------------------------------
-
-    if (
-      formData.leave_type ===
-      "Study Leave"
-    ) {
-      if (
-        !formData.study_program.trim()
-      ) {
-        setError(
-          "Please enter the study program."
-        );
         return;
       }
 
       if (
-        !formData.institution.trim()
+        !formData.start_date ||
+        !formData.end_date
       ) {
         setError(
-          "Please enter the institution / university."
+          "Please enter the start date and end date."
         );
+
         return;
       }
-    }
 
-    // =================================================
-    // SAVE
-    // =================================================
+      if (
+        new Date(
+          `${formData.end_date}T00:00:00`
+        ) <
+        new Date(
+          `${formData.start_date}T00:00:00`
+        )
+      ) {
+        setError(
+          "End date cannot be before start date."
+        );
 
-    try {
-      setSaving(true);
+        return;
+      }
 
-      const payload = {
-        ...formData,
+      const requestedDays =
+        calculateWorkingDays(
+          formData.start_date,
+          formData.end_date,
+          holidayDates
+        );
 
-        total_working_days:
-          calculateWorkingDays(
-            formData.start_date,
-            formData.end_date
-          ),
-      };
+      if (
+        requestedDays <= 0
+      ) {
+        setError(
+          "The selected dates do not contain any working days."
+        );
 
-      console.log(
-        "Submitting leave:",
-        payload
-      );
+        return;
+      }
 
-      const response = await fetch(
-        LEAVES_URL,
-        {
-          method: "POST",
+      // =================================================
+      // ANNUAL LEAVE BALANCE VALIDATION
+      // =================================================
 
-          headers: {
-            ...getAuthHeaders(),
-            "Content-Type":
-              "application/json",
-          },
+      if (
+        formData.leave_type ===
+        "Annual Leave"
+      ) {
+        const currentBalance =
+          Math.max(
+            0,
+            ANNUAL_LEAVE_ALLOWANCE -
+              annualLeaveUsed
+          );
 
-          body: JSON.stringify(
-            payload
-          ),
+        console.log(
+          "Annual Leave Validation:",
+          {
+            employeeId:
+              formData.employee_id,
+            allowance:
+              ANNUAL_LEAVE_ALLOWANCE,
+            used:
+              annualLeaveUsed,
+            balance:
+              currentBalance,
+            requested:
+              requestedDays,
+          }
+        );
+
+        if (
+          requestedDays >
+          currentBalance
+        ) {
+          setError(
+            `Annual leave limit exceeded. This employee has only ${currentBalance} annual leave ${
+              currentBalance ===
+              1
+                ? "day"
+                : "days"
+            } remaining, but ${requestedDays} ${
+              requestedDays ===
+              1
+                ? "day"
+                : "days"
+            } were requested.`
+          );
+
+          return;
         }
-      );
-
-      const data =
-        await response
-          .json()
-          .catch(() => ({}));
-
-      console.log(
-        "Create leave response:",
-        response.status,
-        data
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          data.message ||
-            data.error ||
-            "Unable to create leave request."
-        );
       }
 
-      setSuccessMessage(
-        data.message ||
-          "Leave request created successfully."
-      );
+      // =================================================
+      // SABBATICAL VALIDATION
+      // =================================================
 
-      setShowAddModal(false);
+      if (
+        formData.leave_type ===
+        "Sabbatical Leave"
+      ) {
+        if (
+          !formData.purpose_justification.trim()
+        ) {
+          setError(
+            "Please enter the purpose / justification."
+          );
 
-      setFormData({
-        ...EMPTY_FORM,
-      });
+          return;
+        }
+      }
 
-      await loadLeaves();
-    } catch (err) {
-      console.error(
-        "Create leave error:",
-        err
-      );
+      // =================================================
+      // SECONDMENT / STUDY VALIDATION
+      // =================================================
 
-      setError(
-        err.message ||
-          "Unable to save the leave request."
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
+      if (
+        formData.leave_type ===
+          "Secondment" ||
+        formData.leave_type ===
+          "Study Leave"
+      ) {
+        if (
+          !formData.purpose_justification.trim()
+        ) {
+          setError(
+            "Please enter the purpose / justification."
+          );
+
+          return;
+        }
+      }
+
+      // =================================================
+      // STUDY LEAVE VALIDATION
+      // =================================================
+
+      if (
+        formData.leave_type ===
+        "Study Leave"
+      ) {
+        if (
+          !formData.study_program.trim()
+        ) {
+          setError(
+            "Please enter the study program."
+          );
+
+          return;
+        }
+
+        if (
+          !formData.institution.trim()
+        ) {
+          setError(
+            "Please enter the institution / university."
+          );
+
+          return;
+        }
+      }
+
+      // =================================================
+      // SAVE
+      // =================================================
+
+      try {
+        setSaving(true);
+
+        const formDataToSend =
+          new FormData();
+
+        Object.entries({
+          ...formData,
+          total_working_days:
+            requestedDays,
+        }).forEach(
+          ([key, value]) => {
+            formDataToSend.append(
+              key,
+              value ===
+                undefined ||
+              value === null
+                ? ""
+                : String(value)
+            );
+          }
+        );
+
+        if (attachment) {
+          formDataToSend.append(
+            "attachment",
+            attachment
+          );
+        }
+
+        console.log(
+          "Submitting leave with attachment:",
+          {
+            employeeId:
+              formData.employee_id,
+            leaveType:
+              formData.leave_type,
+            requestedDays,
+            attachment:
+              attachment
+                ? {
+                    name:
+                      attachment.name,
+                    type:
+                      attachment.type,
+                    size:
+                      attachment.size,
+                  }
+                : null,
+          }
+        );
+
+        // =================================================
+        // IMPORTANT FIX
+        //
+        // getAuthHeaders() contains:
+        //
+        // Content-Type: application/json
+        //
+        // That header must NOT be sent with FormData.
+        //
+        // The browser automatically sets:
+        // multipart/form-data; boundary=...
+        // =================================================
+
+        const uploadHeaders = {
+          ...getAuthHeaders(),
+        };
+
+        delete uploadHeaders[
+          "Content-Type"
+        ];
+
+        delete uploadHeaders[
+          "content-type"
+        ];
+
+        const response =
+          await fetch(
+            LEAVES_URL,
+            {
+              method: "POST",
+
+              headers:
+                uploadHeaders,
+
+              body:
+                formDataToSend,
+            }
+          );
+
+        const data =
+          await response
+            .json()
+            .catch(
+              () => ({})
+            );
+
+        console.log(
+          "Create leave response:",
+          response.status,
+          data
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              data.error ||
+              "Unable to create leave request."
+          );
+        }
+
+        setSuccessMessage(
+          data.message ||
+            "Leave request created successfully."
+        );
+
+        setShowAddModal(false);
+
+        setFormData({
+          ...EMPTY_FORM,
+        });
+
+        setAttachment(null);
+
+        const input =
+          document.getElementById(
+            "leave-attachment"
+          );
+
+        if (input) {
+          input.value = "";
+        }
+
+        await loadLeaves();
+      } catch (err) {
+        console.error(
+          "Create leave error:",
+          err
+        );
+
+        setError(
+          err.message ||
+            "Unable to save the leave request."
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
 
   // ====================================================
   // APPROVE
   // ====================================================
 
-  const handleApprove = async (id) => {
-    if (
-      !window.confirm(
-        "Approve this leave request?"
-      )
-    ) {
-      return;
-    }
+  const handleApprove =
+    async (id) => {
+      if (
+        !window.confirm(
+          "Approve this leave request?"
+        )
+      ) {
+        return;
+      }
 
-    try {
-      setError("");
+      try {
+        setError("");
 
-      const response = await fetch(
-        `${LEAVES_URL}/${id}/approve`,
-        {
-          method: "PUT",
-          headers: getAuthHeaders(),
+        const response =
+          await fetch(
+            `${LEAVES_URL}/${id}/approve`,
+            {
+              method: "PUT",
+              headers:
+                getAuthHeaders(),
+            }
+          );
+
+        const data =
+          await response
+            .json()
+            .catch(
+              () => ({})
+            );
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              data.error ||
+              "Unable to approve leave request."
+          );
         }
-      );
 
-      const data =
-        await response
-          .json()
-          .catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(
+        setSuccessMessage(
           data.message ||
-            data.error ||
+            "Leave request approved successfully."
+        );
+
+        await loadLeaves();
+
+        if (
+          selectedLeave?.id ===
+          id
+        ) {
+          setSelectedLeave(
+            null
+          );
+        }
+      } catch (err) {
+        console.error(
+          "Approve leave error:",
+          err
+        );
+
+        setError(
+          err.message ||
             "Unable to approve leave request."
         );
       }
-
-      setSuccessMessage(
-        data.message ||
-          "Leave request approved successfully."
-      );
-
-      await loadLeaves();
-
-      if (
-        selectedLeave?.id === id
-      ) {
-        setSelectedLeave(null);
-      }
-    } catch (err) {
-      console.error(
-        "Approve leave error:",
-        err
-      );
-
-      setError(
-        err.message ||
-          "Unable to approve leave request."
-      );
-    }
-  };
+    };
 
   // ====================================================
   // REJECT
   // ====================================================
 
-  const handleReject = async (id) => {
-    if (
-      !window.confirm(
-        "Reject this leave request?"
-      )
-    ) {
-      return;
-    }
+  const handleReject =
+    async (id) => {
+      if (
+        !window.confirm(
+          "Reject this leave request?"
+        )
+      ) {
+        return;
+      }
 
-    try {
-      setError("");
+      try {
+        setError("");
 
-      const response = await fetch(
-        `${LEAVES_URL}/${id}/reject`,
-        {
-          method: "PUT",
-          headers: getAuthHeaders(),
+        const response =
+          await fetch(
+            `${LEAVES_URL}/${id}/reject`,
+            {
+              method: "PUT",
+              headers:
+                getAuthHeaders(),
+            }
+          );
+
+        const data =
+          await response
+            .json()
+            .catch(
+              () => ({})
+            );
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              data.error ||
+              "Unable to reject leave request."
+          );
         }
-      );
 
-      const data =
-        await response
-          .json()
-          .catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(
+        setSuccessMessage(
           data.message ||
-            data.error ||
+            "Leave request rejected successfully."
+        );
+
+        await loadLeaves();
+
+        if (
+          selectedLeave?.id ===
+          id
+        ) {
+          setSelectedLeave(
+            null
+          );
+        }
+      } catch (err) {
+        console.error(
+          "Reject leave error:",
+          err
+        );
+
+        setError(
+          err.message ||
             "Unable to reject leave request."
         );
       }
-
-      setSuccessMessage(
-        data.message ||
-          "Leave request rejected successfully."
-      );
-
-      await loadLeaves();
-
-      if (
-        selectedLeave?.id === id
-      ) {
-        setSelectedLeave(null);
-      }
-    } catch (err) {
-      console.error(
-        "Reject leave error:",
-        err
-      );
-
-      setError(
-        err.message ||
-          "Unable to reject leave request."
-      );
-    }
-  };
+    };
 
   // ====================================================
   // DELETE
   // ====================================================
 
-  const handleDelete = async (id) => {
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this leave application?"
-      )
-    ) {
-      return;
-    }
+  const handleDelete =
+    async (id) => {
+      if (
+        !window.confirm(
+          "Are you sure you want to delete this leave application?"
+        )
+      ) {
+        return;
+      }
 
-    try {
-      setError("");
+      try {
+        setError("");
 
-      const response = await fetch(
-        `${LEAVES_URL}/${id}`,
-        {
-          method: "DELETE",
-          headers: getAuthHeaders(),
+        const response =
+          await fetch(
+            `${LEAVES_URL}/${id}`,
+            {
+              method: "DELETE",
+              headers:
+                getAuthHeaders(),
+            }
+          );
+
+        const data =
+          await response
+            .json()
+            .catch(
+              () => ({})
+            );
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              data.error ||
+              "Unable to delete leave request."
+          );
         }
-      );
 
-      const data =
-        await response
-          .json()
-          .catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(
+        setSuccessMessage(
           data.message ||
-            data.error ||
+            "Leave request deleted successfully."
+        );
+
+        await loadLeaves();
+
+        if (
+          selectedLeave?.id ===
+          id
+        ) {
+          setSelectedLeave(
+            null
+          );
+        }
+      } catch (err) {
+        console.error(
+          "Delete leave error:",
+          err
+        );
+
+        setError(
+          err.message ||
             "Unable to delete leave request."
         );
       }
-
-      setSuccessMessage(
-        data.message ||
-          "Leave request deleted successfully."
-      );
-
-      await loadLeaves();
-
-      if (
-        selectedLeave?.id === id
-      ) {
-        setSelectedLeave(null);
-      }
-    } catch (err) {
-      console.error(
-        "Delete leave error:",
-        err
-      );
-
-      setError(
-        err.message ||
-          "Unable to delete leave request."
-      );
-    }
-  };
+    };
 
   // ====================================================
   // DEPARTMENTS
   // ====================================================
 
   const departments = useMemo(() => {
-    const values = leaveData
-      .map(
-        (item) =>
-          item.department
-      )
-      .filter(Boolean);
+    const values =
+      leaveData
+        .map(
+          (item) =>
+            item.department
+        )
+        .filter(Boolean);
 
     return [
       ...new Set(values),
@@ -883,184 +1865,184 @@ const Leave = () => {
   // FILTER DATA
   // ====================================================
 
-  const filteredData = useMemo(() => {
-    const search =
-      searchTerm
-        .toLowerCase()
-        .trim();
+  const filteredData =
+    useMemo(() => {
+      const search =
+        searchTerm
+          .toLowerCase()
+          .trim();
 
-    const now = new Date();
+      const now =
+        new Date();
 
-    return leaveData.filter(
-      (item) => {
-        const employeeName =
-          item.employee || "";
+      return leaveData.filter(
+        (item) => {
+          const employeeName =
+            item.employee || "";
 
-        const employeeId =
-          item.employeeId || "";
+          const employeeId =
+            item.employeeId ||
+            "";
 
-        const searchMatch =
-          !search ||
-          employeeName
-            .toLowerCase()
-            .includes(search) ||
-          employeeId
-            .toLowerCase()
-            .includes(search);
+          const searchMatch =
+            !search ||
+            employeeName
+              .toLowerCase()
+              .includes(search) ||
+            employeeId
+              .toLowerCase()
+              .includes(search);
 
-        const departmentMatch =
-          department ===
-            "All Departments" ||
-          item.department ===
-            department;
+          const departmentMatch =
+            department ===
+              "All Departments" ||
+            item.department ===
+              department;
 
-        const leaveTypeMatch =
-          leaveType ===
-            "All Types" ||
-          item.leaveType ===
-            leaveType;
+          const leaveTypeMatch =
+            leaveType ===
+              "All Types" ||
+            item.leaveType ===
+              leaveType;
 
-        const statusMatch =
-          status === "All Status" ||
-          item.status === status;
+          const statusMatch =
+            status ===
+              "All Status" ||
+            item.status ===
+              status;
 
-        let dateMatch = true;
-
-        if (
-          dateFilter !==
-          "All Dates"
-        ) {
-          const start =
-            new Date(
-              `${item.startDate}T00:00:00`
-            );
-
-          const end =
-            new Date(
-              `${item.endDate}T23:59:59`
-            );
+          let dateMatch = true;
 
           if (
-            !Number.isNaN(
-              start.getTime()
-            )
+            dateFilter !==
+            "All Dates"
           ) {
-            // -----------------------------------------
-            // TODAY
-            // -----------------------------------------
-
-            if (
-              dateFilter === "Today"
-            ) {
-              dateMatch =
-                now >= start &&
-                now <= end;
-            }
-
-            // -----------------------------------------
-            // THIS WEEK
-            // -----------------------------------------
-
-            if (
-              dateFilter ===
-              "This Week"
-            ) {
-              const weekStart =
-                new Date(now);
-
-              const day =
-                weekStart.getDay();
-
-              const diff =
-                day === 0
-                  ? -6
-                  : 1 - day;
-
-              weekStart.setDate(
-                weekStart.getDate() +
-                  diff
+            const start =
+              new Date(
+                `${item.startDate}T00:00:00`
               );
 
-              weekStart.setHours(
-                0,
-                0,
-                0,
-                0
+            const end =
+              new Date(
+                `${item.endDate}T23:59:59`
               );
 
-              const weekEnd =
-                new Date(
-                  weekStart
+            if (
+              !Number.isNaN(
+                start.getTime()
+              )
+            ) {
+              if (
+                dateFilter ===
+                "Today"
+              ) {
+                dateMatch =
+                  now >= start &&
+                  now <= end;
+              }
+
+              if (
+                dateFilter ===
+                "This Week"
+              ) {
+                const weekStart =
+                  new Date(
+                    now
+                  );
+
+                const day =
+                  weekStart.getDay();
+
+                const diff =
+                  day === 0
+                    ? -6
+                    : 1 - day;
+
+                weekStart.setDate(
+                  weekStart.getDate() +
+                    diff
                 );
 
-              weekEnd.setDate(
-                weekEnd.getDate() +
-                  6
-              );
-
-              weekEnd.setHours(
-                23,
-                59,
-                59,
-                999
-              );
-
-              dateMatch =
-                start <= weekEnd &&
-                end >= weekStart;
-            }
-
-            // -----------------------------------------
-            // THIS MONTH
-            // -----------------------------------------
-
-            if (
-              dateFilter ===
-              "This Month"
-            ) {
-              const monthStart =
-                new Date(
-                  now.getFullYear(),
-                  now.getMonth(),
-                  1
-                );
-
-              const monthEnd =
-                new Date(
-                  now.getFullYear(),
-                  now.getMonth() +
-                    1,
+                weekStart.setHours(
                   0,
+                  0,
+                  0,
+                  0
+                );
+
+                const weekEnd =
+                  new Date(
+                    weekStart
+                  );
+
+                weekEnd.setDate(
+                  weekEnd.getDate() +
+                    6
+                );
+
+                weekEnd.setHours(
                   23,
                   59,
                   59,
                   999
                 );
 
-              dateMatch =
-                start <= monthEnd &&
-                end >= monthStart;
+                dateMatch =
+                  start <=
+                    weekEnd &&
+                  end >=
+                    weekStart;
+              }
+
+              if (
+                dateFilter ===
+                "This Month"
+              ) {
+                const monthStart =
+                  new Date(
+                    now.getFullYear(),
+                    now.getMonth(),
+                    1
+                  );
+
+                const monthEnd =
+                  new Date(
+                    now.getFullYear(),
+                    now.getMonth() +
+                      1,
+                    0,
+                    23,
+                    59,
+                    59,
+                    999
+                  );
+
+                dateMatch =
+                  start <=
+                    monthEnd &&
+                  end >=
+                    monthStart;
+              }
             }
           }
-        }
 
-        return (
-          searchMatch &&
-          departmentMatch &&
-          leaveTypeMatch &&
-          statusMatch &&
-          dateMatch
-        );
-      }
-    );
-  }, [
-    leaveData,
-    searchTerm,
-    department,
-    leaveType,
-    status,
-    dateFilter,
-  ]);
+          return (
+            searchMatch &&
+            departmentMatch &&
+            leaveTypeMatch &&
+            statusMatch &&
+            dateMatch
+          );
+        }
+      );
+    }, [
+      leaveData,
+      searchTerm,
+      department,
+      leaveType,
+      status,
+      dateFilter,
+    ]);
 
   // ====================================================
   // STATISTICS
@@ -1072,31 +2054,35 @@ const Leave = () => {
   const approved =
     leaveData.filter(
       (item) =>
-        item.status ===
-        "Approved"
+        normalizeStatus(
+          item.status
+        ) === "approved"
     ).length;
 
   const pending =
     leaveData.filter(
       (item) =>
-        item.status ===
-        "Pending"
+        normalizeStatus(
+          item.status
+        ) === "pending"
     ).length;
 
   const rejected =
     leaveData.filter(
       (item) =>
-        item.status ===
-        "Rejected"
+        normalizeStatus(
+          item.status
+        ) === "rejected"
     ).length;
 
   const totalLeaveDays =
     leaveData.reduce(
-      (total, item) =>
-        total +
-        Number(
-          item.days || 0
-        ),
+      (total, item) => {
+        return (
+          total +
+          getLeaveDays(item)
+        );
+      },
       0
     );
 
@@ -1104,736 +2090,927 @@ const Leave = () => {
   // RENDER FORM FIELDS
   // ====================================================
 
-  const renderFormFields = () => {
-    const selectedEmployee =
-      employees.find(
-        (employee) =>
-          String(
-            employee.id
-          ) ===
-          String(
-            formData.employee_id
-          )
-      );
+  const renderFormFields =
+    () => {
+      const selectedEmployee =
+        employees.find(
+          (employee) =>
+            String(
+              employee.id
+            ) ===
+            String(
+              formData.employee_id
+            )
+        );
 
-    return (
-      <>
-        {/* ==============================================
-            EMPLOYEE INFORMATION
-        ============================================== */}
+      return (
+        <>
+          {/* ==============================================
+              EMPLOYEE INFORMATION
+          ============================================== */}
 
-        <div className="leave-form-section">
-          <div className="leave-form-section-title">
-            <FaFileAlt />
+          <div className="leave-form-section">
+            <div className="leave-form-section-title">
+              <FaFileAlt />
 
-            <div>
-              <h3>
-                Employee Information
-              </h3>
+              <div>
+                <h3>
+                  Employee Information
+                </h3>
 
-              <p>
-                Information from the
-                Staff Monitoring
-                employee database.
-              </p>
+                <p>
+                  Information from the
+                  Staff Monitoring
+                  employee database.
+                </p>
+              </div>
+            </div>
+
+            <div className="leave-form-grid">
+              <div className="leave-form-field field-full">
+                <label>
+                  Employee{" "}
+                  <span>*</span>
+                </label>
+
+                <select
+                  name="employee_id"
+                  value={
+                    formData.employee_id
+                  }
+                  onChange={
+                    handleEmployeeChange
+                  }
+                  disabled={
+                    employeesLoading ||
+                    saving
+                  }
+                  required
+                >
+                  <option value="">
+                    {employeesLoading
+                      ? "Loading employees..."
+                      : "Select employee"}
+                  </option>
+
+                  {employees.map(
+                    (employee) => (
+                      <option
+                        key={
+                          employee.id
+                        }
+                        value={
+                          employee.id
+                        }
+                      >
+                        {
+                          employee.employee
+                        }{" "}
+                        —{" "}
+                        {
+                          employee.employeeId
+                        }
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+
+              <div className="leave-form-field">
+                <label>
+                  Position / Job Title
+                </label>
+
+                <input
+                  type="text"
+                  value={
+                    selectedEmployee?.positionTitle ||
+                    ""
+                  }
+                  placeholder="Position / Job Title"
+                  readOnly
+                />
+              </div>
+
+              <div className="leave-form-field">
+                <label>
+                  Department / Section
+                </label>
+
+                <input
+                  type="text"
+                  value={
+                    selectedEmployee
+                      ? [
+                          selectedEmployee.department,
+                          selectedEmployee.section,
+                        ]
+                          .filter(
+                            Boolean
+                          )
+                          .join(
+                            " / "
+                          )
+                      : ""
+                  }
+                  placeholder="Department / Section"
+                  readOnly
+                />
+              </div>
+
+              <div className="leave-form-field">
+                <label>
+                  Work Location (Province / HQ)
+                </label>
+
+                <input
+                  type="text"
+                  name="work_location"
+                  value={
+                    formData.work_location
+                  }
+                  onChange={
+                    handleFormChange
+                  }
+                  placeholder="Province / HQ"
+                  disabled={
+                    saving
+                  }
+                />
+              </div>
+
+              <div className="leave-form-field">
+                <label>
+                  Supervisor
+                </label>
+
+                <input
+                  type="text"
+                  name="supervisor_name"
+                  value={
+                    formData.supervisor_name
+                  }
+                  onChange={
+                    handleFormChange
+                  }
+                  placeholder="Supervisor"
+                  disabled={
+                    saving
+                  }
+                />
+              </div>
+
+              <div className="leave-form-field">
+                <label>
+                  Date of Request
+                </label>
+
+                <input
+                  type="date"
+                  value={
+                    getTodayLocalDate()
+                  }
+                  readOnly
+                />
+              </div>
             </div>
           </div>
 
-          <div className="leave-form-grid">
-            <div className="leave-form-field field-full">
-              <label>
-                Employee{" "}
-                <span>*</span>
-              </label>
+          {/* ==============================================
+              LEAVE DETAILS
+          ============================================== */}
 
-              <select
-                name="employee_id"
-                value={
-                  formData.employee_id
-                }
-                onChange={
-                  handleEmployeeChange
-                }
-                disabled={
-                  employeesLoading ||
-                  saving
-                }
-                required
-              >
-                <option value="">
-                  {employeesLoading
-                    ? "Loading employees..."
-                    : "Select employee"}
-                </option>
-
-                {employees.map(
-                  (employee) => (
-                    <option
-                      key={
-                        employee.id
-                      }
-                      value={
-                        employee.id
-                      }
-                    >
-                      {employee.employee}{" "}
-                      —{" "}
-                      {
-                        employee.employeeId
-                      }
-                    </option>
-                  )
-                )}
-              </select>
-            </div>
-
-            <div className="leave-form-field">
-              <label>
-                Position / Job Title
-              </label>
-
-              <input
-                type="text"
-                value={
-                  selectedEmployee?.positionTitle ||
-                  ""
-                }
-                placeholder="Position / Job Title"
-                readOnly
-              />
-            </div>
-
-            <div className="leave-form-field">
-              <label>
-                Department / Section
-              </label>
-
-              <input
-                type="text"
-                value={
-                  selectedEmployee
-                    ? [
-                        selectedEmployee.department,
-                        selectedEmployee.section,
-                      ]
-                        .filter(Boolean)
-                        .join(" / ")
-                    : ""
-                }
-                placeholder="Department / Section"
-                readOnly
-              />
-            </div>
-
-            <div className="leave-form-field">
-              <label>
-                Work Location (Province / HQ)
-              </label>
-
-              <input
-                type="text"
-                name="work_location"
-                value={
-                  formData.work_location
-                }
-                onChange={
-                  handleFormChange
-                }
-                placeholder="Province / HQ"
-                disabled={saving}
-              />
-            </div>
-
-            <div className="leave-form-field">
-              <label>
-                Supervisor
-              </label>
-
-              <input
-                type="text"
-                name="supervisor_name"
-                value={
-                  formData.supervisor_name
-                }
-                onChange={
-                  handleFormChange
-                }
-                placeholder="Supervisor"
-                disabled={saving}
-              />
-            </div>
-
-            <div className="leave-form-field">
-              <label>
-                Date of Request
-              </label>
-
-              <input
-                type="date"
-                value={
-                  new Date()
-                    .toISOString()
-                    .split("T")[0]
-                }
-                readOnly
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* ==============================================
-            LEAVE DETAILS
-        ============================================== */}
-
-        <div className="leave-form-section">
-          <div className="leave-form-section-title">
-            <FaCalendarAlt />
-
-            <div>
-              <h3>
-                Leave Details
-              </h3>
-
-              <p>
-                Select the official
-                VEO leave application
-                form type.
-              </p>
-            </div>
-          </div>
-
-          <div className="leave-form-grid">
-            <div className="leave-form-field field-full">
-              <label>
-                Type of Leave{" "}
-                <span>*</span>
-              </label>
-
-              <select
-                name="leave_type"
-                value={
-                  formData.leave_type
-                }
-                onChange={
-                  handleFormChange
-                }
-                disabled={saving}
-                required
-              >
-                {LEAVE_TYPES.map(
-                  (type) => (
-                    <option
-                      key={type}
-                      value={type}
-                    >
-                      {type}
-                    </option>
-                  )
-                )}
-              </select>
-            </div>
-
-            <div className="leave-form-field">
-              <label>
-                Start Date{" "}
-                <span>*</span>
-              </label>
-
-              <input
-                type="date"
-                name="start_date"
-                value={
-                  formData.start_date
-                }
-                onChange={
-                  handleDateChange
-                }
-                disabled={saving}
-                required
-              />
-            </div>
-
-            <div className="leave-form-field">
-              <label>
-                End Date{" "}
-                <span>*</span>
-              </label>
-
-              <input
-                type="date"
-                name="end_date"
-                value={
-                  formData.end_date
-                }
-                onChange={
-                  handleDateChange
-                }
-                disabled={saving}
-                required
-              />
-            </div>
-
-            <div className="leave-form-field">
-              <label>
-                Total Working Days Requested
-              </label>
-
-              <input
-                type="number"
-                value={
-                  formData.total_working_days
-                }
-                readOnly
-              />
-
-              <small>
-                Calculated Monday–Friday
-                only.
-              </small>
-            </div>
-          </div>
-        </div>
-
-        {/* ==============================================
-            ANNUAL LEAVE
-        ============================================== */}
-
-        {formData.leave_type ===
-          "Annual Leave" && (
           <div className="leave-form-section">
             <div className="leave-form-section-title">
               <FaCalendarAlt />
 
               <div>
                 <h3>
-                  Annual Leave Travel Claim
+                  Leave Details
                 </h3>
 
                 <p>
-                  Form No. 14 — select
-                  whether travel
-                  reimbursement is
-                  requested.
-                </p>
-              </div>
-            </div>
-
-            <label className="leave-radio-card">
-              <input
-                type="checkbox"
-                name="travel_claim"
-                checked={
-                  formData.travel_claim
-                }
-                onChange={
-                  handleFormChange
-                }
-                disabled={saving}
-              />
-
-              <span>
-                I am requesting Annual
-                Leave Travel
-                reimbursement (75% of
-                eligible travel cost).
-              </span>
-            </label>
-
-            <p className="leave-form-note">
-              If not selected, the
-              application records that
-              no travel reimbursement is
-              requested.
-            </p>
-          </div>
-        )}
-
-        {/* ==============================================
-            MEDICAL LEAVE
-        ============================================== */}
-
-        {formData.leave_type ===
-          "Medical Leave" && (
-          <div className="leave-form-section">
-            <div className="leave-form-section-title">
-              <FaFileAlt />
-
-              <div>
-                <h3>
-                  Medical Leave
-                  Certification
-                </h3>
-
-                <p>
-                  Form No. 17 — medical
-                  certificate information.
-                </p>
-              </div>
-            </div>
-
-            <div className="leave-radio-group">
-              <label className="leave-radio-card">
-                <input
-                  type="radio"
-                  name="medical_certificate_status"
-                  value="Attached"
-                  checked={
-                    formData.medical_certificate_status ===
-                    "Attached"
-                  }
-                  onChange={
-                    handleFormChange
-                  }
-                  disabled={saving}
-                />
-
-                <span>
-                  Medical certificate
-                  attached
-                </span>
-              </label>
-
-              <label className="leave-radio-card">
-                <input
-                  type="radio"
-                  name="medical_certificate_status"
-                  value="Will be submitted within 3 working days"
-                  checked={
-                    formData.medical_certificate_status ===
-                    "Will be submitted within 3 working days"
-                  }
-                  onChange={
-                    handleFormChange
-                  }
-                  disabled={saving}
-                />
-
-                <span>
-                  Will be submitted within
-                  three (3) working days
-                </span>
-              </label>
-            </div>
-
-            <div className="leave-form-note">
-              Staff should notify their
-              supervisor within 24 hours
-              of absence.
-            </div>
-          </div>
-        )}
-
-        {/* ==============================================
-            SABBATICAL / SECONDMENT / STUDY
-        ============================================== */}
-
-        {(formData.leave_type ===
-          "Sabbatical Leave" ||
-          formData.leave_type ===
-            "Secondment" ||
-          formData.leave_type ===
-            "Study Leave") && (
-          <div className="leave-form-section">
-            <div className="leave-form-section-title">
-              <FaFileAlt />
-
-              <div>
-                <h3>
-                  {
-                    formData.leave_type
-                  }{" "}
-                  Application
-                </h3>
-
-                <p>
-                  Form No. 15 —
-                  application details and
-                  recommendation
-                  information.
+                  Select the official
+                  VEO leave application
+                  form type.
                 </p>
               </div>
             </div>
 
             <div className="leave-form-grid">
-              <div className="leave-form-field">
-                <label>
-                  Total Period Requested
-                  (months)
-                </label>
-
-                <input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  name="requested_duration_months"
-                  value={
-                    formData.requested_duration_months
-                  }
-                  onChange={
-                    handleFormChange
-                  }
-                  placeholder="e.g. 6"
-                  disabled={saving}
-                />
-              </div>
-
               <div className="leave-form-field field-full">
                 <label>
-                  Purpose / Justification{" "}
+                  Type of Leave{" "}
                   <span>*</span>
                 </label>
 
-                <textarea
-                  name="purpose_justification"
+                <select
+                  name="leave_type"
                   value={
-                    formData.purpose_justification
+                    formData.leave_type
                   }
                   onChange={
                     handleFormChange
                   }
-                  placeholder="Enter the purpose / justification..."
-                  rows="4"
-                  disabled={saving}
+                  disabled={
+                    saving
+                  }
+                  required
+                >
+                  {LEAVE_TYPES.map(
+                    (type) => (
+                      <option
+                        key={type}
+                        value={type}
+                      >
+                        {type}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+
+              <div className="leave-form-field">
+                <label>
+                  Start Date{" "}
+                  <span>*</span>
+                </label>
+
+                <input
+                  type="date"
+                  name="start_date"
+                  value={
+                    formData.start_date
+                  }
+                  onChange={
+                    handleDateChange
+                  }
+                  disabled={
+                    saving
+                  }
                   required
                 />
               </div>
 
-              {(formData.leave_type ===
-                "Secondment" ||
-                formData.leave_type ===
-                  "Study Leave") && (
-                <div className="leave-form-field field-full">
-                  <label>
-                    Funding / Salary
-                    Arrangement
-                  </label>
+              <div className="leave-form-field">
+                <label>
+                  End Date{" "}
+                  <span>*</span>
+                </label>
 
-                  <select
-                    name="funding_arrangement"
-                    value={
-                      formData.funding_arrangement
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    disabled={saving}
-                  >
-                    <option value="">
-                      Select arrangement
-                    </option>
+                <input
+                  type="date"
+                  name="end_date"
+                  value={
+                    formData.end_date
+                  }
+                  onChange={
+                    handleDateChange
+                  }
+                  disabled={
+                    saving
+                  }
+                  required
+                />
+              </div>
 
-                    <option value="Salary paid by Electoral Office">
-                      Salary paid by
-                      Electoral Office
-                    </option>
+              <div className="leave-form-field">
+                <label>
+                  Total Working Days Requested
+                </label>
 
-                    <option value="Salary paid by Host Institution">
-                      Salary paid by Host
-                      Institution
-                    </option>
+                <input
+                  type="number"
+                  value={
+                    formData.total_working_days
+                  }
+                  readOnly
+                />
 
-                    <option value="Shared arrangement">
-                      Shared arrangement
-                    </option>
-                  </select>
-                </div>
-              )}
+                <small>
+                  Excludes weekends and Vanuatu public holidays.
+                </small>
+              </div>
 
-              {formData.funding_arrangement ===
-                "Shared arrangement" && (
-                <div className="leave-form-field field-full">
-                  <label>
-                    Funding Explanation
-                  </label>
+              <div className="leave-form-field">
+                <label>
+                  Annual Leave Balance
+                </label>
 
-                  <textarea
-                    name="funding_explanation"
-                    value={
-                      formData.funding_explanation
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    placeholder="Explain the shared arrangement..."
-                    rows="3"
-                    disabled={saving}
-                  />
-                </div>
-              )}
+                <input
+                  type="number"
+                  value={
+                    annualLeaveBalance
+                  }
+                  readOnly
+                />
+
+                <small>
+                  {annualLeaveUsed}{" "}
+                  days used from{" "}
+                  {
+                    ANNUAL_LEAVE_ALLOWANCE
+                  }{" "}
+                  annual leave days.
+                </small>
+              </div>
             </div>
 
-            {/* ==========================================
-                STUDY LEAVE DETAILS
-            ========================================== */}
-
             {formData.leave_type ===
-              "Study Leave" && (
-              <>
-                <div className="leave-subsection-title">
-                  Study Details — Form
-                  No. 16
+              "Annual Leave" &&
+              formData.total_working_days >
+                annualLeaveBalance && (
+                <div className="leave-form-note">
+                  <strong>
+                    Annual Leave Limit Exceeded:
+                  </strong>{" "}
+                  This employee has only{" "}
+                  {
+                    annualLeaveBalance
+                  }{" "}
+                  {
+                    annualLeaveBalance ===
+                    1
+                      ? "day"
+                      : "days"
+                  }{" "}
+                  remaining, but{" "}
+                  {
+                    formData.total_working_days
+                  }{" "}
+                  {
+                    formData.total_working_days ===
+                    1
+                      ? "day"
+                      : "days"
+                  }{" "}
+                  have been requested.
                 </div>
+              )}
+          </div>
 
-                <div className="leave-form-grid">
-                  <div className="leave-form-field">
-                    <label>
-                      Payroll No.
-                    </label>
+          {/* ==============================================
+              ANNUAL LEAVE
+          ============================================== */}
 
-                    <input
-                      type="text"
-                      name="payroll_no"
-                      value={
-                        formData.payroll_no
-                      }
-                      onChange={
-                        handleFormChange
-                      }
-                      placeholder="Payroll number"
-                      disabled={saving}
-                    />
-                  </div>
+          {formData.leave_type ===
+            "Annual Leave" && (
+            <div className="leave-form-section">
+              <div className="leave-form-section-title">
+                <FaCalendarAlt />
 
-                  <div className="leave-form-field">
-                    <label>
-                      Study Program
-                    </label>
+                <div>
+                  <h3>
+                    Annual Leave Travel Claim
+                  </h3>
 
-                    <input
-                      type="text"
-                      name="study_program"
-                      value={
-                        formData.study_program
-                      }
-                      onChange={
-                        handleFormChange
-                      }
-                      placeholder="Program / course"
-                      disabled={saving}
-                    />
-                  </div>
-
-                  <div className="leave-form-field">
-                    <label>
-                      Institution /
-                      University
-                    </label>
-
-                    <input
-                      type="text"
-                      name="institution"
-                      value={
-                        formData.institution
-                      }
-                      onChange={
-                        handleFormChange
-                      }
-                      placeholder="Institution / University"
-                      disabled={saving}
-                    />
-                  </div>
-
-                  <div className="leave-form-field">
-                    <label>
-                      Study Location
-                    </label>
-
-                    <input
-                      type="text"
-                      name="study_location"
-                      value={
-                        formData.study_location
-                      }
-                      onChange={
-                        handleFormChange
-                      }
-                      placeholder="Location"
-                      disabled={saving}
-                    />
-                  </div>
+                  <p>
+                    Form No. 14 — select
+                    whether travel
+                    reimbursement is
+                    requested.
+                  </p>
                 </div>
+              </div>
 
-                <label className="leave-radio-card bonding-card">
+              <label className="leave-radio-card">
+                <input
+                  type="checkbox"
+                  name="travel_claim"
+                  checked={
+                    formData.travel_claim
+                  }
+                  onChange={
+                    handleFormChange
+                  }
+                  disabled={
+                    saving
+                  }
+                />
+
+                <span>
+                  I am requesting Annual
+                  Leave Travel
+                  reimbursement (75% of
+                  eligible travel cost).
+                </span>
+              </label>
+
+              <p className="leave-form-note">
+                If not selected, the
+                application records that
+                no travel reimbursement is
+                requested.
+              </p>
+            </div>
+          )}
+
+          {/* ==============================================
+              MEDICAL LEAVE
+          ============================================== */}
+
+          {formData.leave_type ===
+            "Medical Leave" && (
+            <div className="leave-form-section">
+              <div className="leave-form-section-title">
+                <FaFileAlt />
+
+                <div>
+                  <h3>
+                    Medical Leave
+                    Certification
+                  </h3>
+
+                  <p>
+                    Form No. 17 — medical
+                    certificate information.
+                  </p>
+                </div>
+              </div>
+
+              <div className="leave-radio-group">
+                <label className="leave-radio-card">
                   <input
-                    type="checkbox"
-                    name="bonding_agreement"
+                    type="radio"
+                    name="medical_certificate_status"
+                    value="Attached"
                     checked={
-                      formData.bonding_agreement
+                      formData.medical_certificate_status ===
+                      "Attached"
                     }
                     onChange={
                       handleFormChange
                     }
-                    disabled={saving}
+                    disabled={
+                      saving
+                    }
                   />
 
                   <span>
-                    I acknowledge the
-                    Study Leave Bonding
-                    Agreement and
-                    understand the
-                    return-to-duty and
-                    bonded-service
-                    conditions in Form No.
-                    16.
+                    Medical certificate
+                    attached
                   </span>
                 </label>
-              </>
-            )}
-          </div>
-        )}
 
-        {/* ==============================================
-            EMPLOYEE DECLARATION
-        ============================================== */}
+                <label className="leave-radio-card">
+                  <input
+                    type="radio"
+                    name="medical_certificate_status"
+                    value="Will be submitted within 3 working days"
+                    checked={
+                      formData.medical_certificate_status ===
+                      "Will be submitted within 3 working days"
+                    }
+                    onChange={
+                      handleFormChange
+                    }
+                    disabled={
+                      saving
+                    }
+                  />
 
-        <div className="leave-form-section">
-          <div className="leave-form-section-title">
-            <FaCheckCircle />
+                  <span>
+                    Will be submitted within
+                    three (3) working days
+                  </span>
+                </label>
+              </div>
 
-            <div>
-              <h3>
-                Employee Declaration
-              </h3>
+              <div className="leave-form-note">
+                Staff should notify their
+                supervisor within 24 hours
+                of absence.
+              </div>
+            </div>
+          )}
 
-              <p>
-                The employee confirms
-                that the information
-                provided is true and
-                accurate.
-              </p>
+          {/* ==============================================
+              SABBATICAL / SECONDMENT / STUDY
+          ============================================== */}
+
+          {(formData.leave_type ===
+            "Sabbatical Leave" ||
+            formData.leave_type ===
+              "Secondment" ||
+            formData.leave_type ===
+              "Study Leave") && (
+            <div className="leave-form-section">
+              <div className="leave-form-section-title">
+                <FaFileAlt />
+
+                <div>
+                  <h3>
+                    {
+                      formData.leave_type
+                    }{" "}
+                    Application
+                  </h3>
+
+                  <p>
+                    Form No. 15 —
+                    application details and
+                    recommendation
+                    information.
+                  </p>
+                </div>
+              </div>
+
+              <div className="leave-form-grid">
+                <div className="leave-form-field">
+                  <label>
+                    Total Period Requested
+                    (months)
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    name="requested_duration_months"
+                    value={
+                      formData.requested_duration_months
+                    }
+                    onChange={
+                      handleFormChange
+                    }
+                    placeholder="e.g. 6"
+                    disabled={
+                      saving
+                    }
+                  />
+                </div>
+
+                <div className="leave-form-field field-full">
+                  <label>
+                    Purpose / Justification{" "}
+                    <span>*</span>
+                  </label>
+
+                  <textarea
+                    name="purpose_justification"
+                    value={
+                      formData.purpose_justification
+                    }
+                    onChange={
+                      handleFormChange
+                    }
+                    placeholder="Enter the purpose / justification..."
+                    rows="4"
+                    disabled={
+                      saving
+                    }
+                    required
+                  />
+                </div>
+
+                {(formData.leave_type ===
+                  "Secondment" ||
+                  formData.leave_type ===
+                    "Study Leave") && (
+                  <div className="leave-form-field field-full">
+                    <label>
+                      Funding / Salary
+                      Arrangement
+                    </label>
+
+                    <select
+                      name="funding_arrangement"
+                      value={
+                        formData.funding_arrangement
+                      }
+                      onChange={
+                        handleFormChange
+                      }
+                      disabled={
+                        saving
+                      }
+                    >
+                      <option value="">
+                        Select arrangement
+                      </option>
+
+                      <option value="Salary paid by Electoral Office">
+                        Salary paid by
+                        Electoral Office
+                      </option>
+
+                      <option value="Salary paid by Host Institution">
+                        Salary paid by Host
+                        Institution
+                      </option>
+
+                      <option value="Shared arrangement">
+                        Shared arrangement
+                      </option>
+                    </select>
+                  </div>
+                )}
+
+                {formData.funding_arrangement ===
+                  "Shared arrangement" && (
+                  <div className="leave-form-field field-full">
+                    <label>
+                      Funding Explanation
+                    </label>
+
+                    <textarea
+                      name="funding_explanation"
+                      value={
+                        formData.funding_explanation
+                      }
+                      onChange={
+                        handleFormChange
+                      }
+                      placeholder="Explain the shared arrangement..."
+                      rows="3"
+                      disabled={
+                        saving
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* ==========================================
+                  STUDY LEAVE DETAILS
+              ========================================== */}
+
+              {formData.leave_type ===
+                "Study Leave" && (
+                <>
+                  <div className="leave-subsection-title">
+                    Study Details — Form
+                    No. 16
+                  </div>
+
+                  <div className="leave-form-grid">
+                    <div className="leave-form-field">
+                      <label>
+                        Payroll No.
+                      </label>
+
+                      <input
+                        type="text"
+                        name="payroll_no"
+                        value={
+                          formData.payroll_no
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        placeholder="Payroll number"
+                        disabled={
+                          saving
+                        }
+                      />
+                    </div>
+
+                    <div className="leave-form-field">
+                      <label>
+                        Study Program
+                      </label>
+
+                      <input
+                        type="text"
+                        name="study_program"
+                        value={
+                          formData.study_program
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        placeholder="Program / course"
+                        disabled={
+                          saving
+                        }
+                      />
+                    </div>
+
+                    <div className="leave-form-field">
+                      <label>
+                        Institution /
+                        University
+                      </label>
+
+                      <input
+                        type="text"
+                        name="institution"
+                        value={
+                          formData.institution
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        placeholder="Institution / University"
+                        disabled={
+                          saving
+                        }
+                      />
+                    </div>
+
+                    <div className="leave-form-field">
+                      <label>
+                        Study Location
+                      </label>
+
+                      <input
+                        type="text"
+                        name="study_location"
+                        value={
+                          formData.study_location
+                        }
+                        onChange={
+                          handleFormChange
+                        }
+                        placeholder="Location"
+                        disabled={
+                          saving
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <label className="leave-radio-card bonding-card">
+                    <input
+                      type="checkbox"
+                      name="bonding_agreement"
+                      checked={
+                        formData.bonding_agreement
+                      }
+                      onChange={
+                        handleFormChange
+                      }
+                      disabled={
+                        saving
+                      }
+                    />
+
+                    <span>
+                      I acknowledge the
+                      Study Leave Bonding
+                      Agreement and
+                      understand the
+                      return-to-duty and
+                      bonded-service
+                      conditions in Form No.
+                      16.
+                    </span>
+                  </label>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ==============================================
+              EMPLOYEE DECLARATION
+          ============================================== */}
+
+          <div className="leave-form-section">
+            <div className="leave-form-section-title">
+              <FaCheckCircle />
+
+              <div>
+                <h3>
+                  Employee Declaration
+                </h3>
+
+                <p>
+                  The employee confirms
+                  that the information
+                  provided is true and
+                  accurate.
+                </p>
+              </div>
+            </div>
+
+            <div className="leave-form-note">
+              Submitting this digital
+              application records the
+              employee's declaration for
+              the selected VEO leave form.
+            </div>
+
+            {/* COMMENTS + ATTACHMENT */}
+
+            <div className="leave-form-grid field-full">
+
+              {/* COMMENTS */}
+
+              <div className="leave-form-field">
+                <label>
+                  Additional Comments /
+                  Reason
+                </label>
+
+                <textarea
+                  name="reason"
+                  value={
+                    formData.reason
+                  }
+                  onChange={
+                    handleFormChange
+                  }
+                  placeholder="Optional comments..."
+                  rows="3"
+                  disabled={
+                    saving
+                  }
+                />
+              </div>
+
+              {/* ATTACHMENT */}
+
+              <div className="leave-form-field">
+                <label>
+                  Director Approval Letter /
+                  Signature
+                </label>
+
+                <div className="leave-attachment-wrapper">
+
+                  <input
+                    type="file"
+                    id="leave-attachment"
+                    name="attachment"
+                    accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                    onChange={
+                      handleAttachmentChange
+                    }
+                    disabled={
+                      saving
+                    }
+                    hidden
+                  />
+
+                  <label
+                    htmlFor="leave-attachment"
+                    className="leave-upload-btn"
+                  >
+                    <FaPaperclip />
+
+                    <span>
+                      {attachment
+                        ? "Change Attachment"
+                        : "Upload Attachment"}
+                    </span>
+                  </label>
+
+                  {attachment && (
+                    <div className="leave-selected-file">
+
+                      <div className="leave-selected-file-icon">
+                        <FaFileAlt />
+                      </div>
+
+                      <div className="leave-selected-file-info">
+                        <strong>
+                          {
+                            attachment.name
+                          }
+                        </strong>
+
+                        <small>
+                          {formatFileSize(
+                            attachment.size
+                          )}
+                        </small>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="leave-remove-file-btn"
+                        onClick={
+                          removeAttachment
+                        }
+                        disabled={
+                          saving
+                        }
+                        title="Remove attachment"
+                      >
+                        <FaTimes />
+                      </button>
+
+                    </div>
+                  )}
+
+                  {!attachment && (
+                    <small className="leave-upload-help">
+                      Upload the director's
+                      approval letter or
+                      signature. PDF, JPG,
+                      JPEG or PNG — maximum
+                      5 MB.
+                    </small>
+                  )}
+
+                </div>
+              </div>
+
             </div>
           </div>
-
-          <div className="leave-form-note">
-            Submitting this digital
-            application records the
-            employee's declaration for
-            the selected VEO leave form.
-          </div>
-
-          <div className="leave-form-field field-full">
-            <label>
-              Additional Comments /
-              Reason
-            </label>
-
-            <textarea
-              name="reason"
-              value={
-                formData.reason
-              }
-              onChange={
-                handleFormChange
-              }
-              placeholder="Optional comments..."
-              rows="3"
-              disabled={saving}
-            />
-          </div>
-        </div>
-      </>
-    );
-  };
+        </>
+      );
+    };
 
   // ====================================================
   // RETURN
@@ -1862,6 +3039,7 @@ const Leave = () => {
           ============================================= */}
 
           <div className="leave-header">
+
             <div className="leave-title-section">
 
               <div className="leave-title-icon">
@@ -1879,6 +3057,7 @@ const Leave = () => {
                   requests
                 </p>
               </div>
+
             </div>
 
             <div className="leave-header-actions">
@@ -1886,8 +3065,12 @@ const Leave = () => {
               <button
                 type="button"
                 className="refresh-btn"
-                onClick={loadLeaves}
-                disabled={loading}
+                onClick={
+                  loadLeaves
+                }
+                disabled={
+                  loading
+                }
               >
                 <FaSyncAlt />
 
@@ -1950,13 +3133,17 @@ const Leave = () => {
               <FaCheckCircle />
 
               <span>
-                {successMessage}
+                {
+                  successMessage
+                }
               </span>
 
               <button
                 type="button"
                 onClick={() =>
-                  setSuccessMessage("")
+                  setSuccessMessage(
+                    ""
+                  )
                 }
               >
                 <FaTimes />
@@ -1972,6 +3159,7 @@ const Leave = () => {
           <div className="leave-statistics">
 
             <div className="leave-stat-card total-card">
+
               <div className="stat-icon">
                 <FaFileAlt />
               </div>
@@ -1982,16 +3170,20 @@ const Leave = () => {
                 </span>
 
                 <strong>
-                  {totalApplications}
+                  {
+                    totalApplications
+                  }
                 </strong>
 
                 <small>
                   All leave applications
                 </small>
               </div>
+
             </div>
 
             <div className="leave-stat-card approved-card">
+
               <div className="stat-icon">
                 <FaCheckCircle />
               </div>
@@ -2009,9 +3201,11 @@ const Leave = () => {
                   Approved applications
                 </small>
               </div>
+
             </div>
 
             <div className="leave-stat-card pending-card">
+
               <div className="stat-icon">
                 <FaClock />
               </div>
@@ -2029,9 +3223,11 @@ const Leave = () => {
                   Waiting for approval
                 </small>
               </div>
+
             </div>
 
             <div className="leave-stat-card rejected-card">
+
               <div className="stat-icon">
                 <FaTimesCircle />
               </div>
@@ -2049,9 +3245,11 @@ const Leave = () => {
                   Rejected applications
                 </small>
               </div>
+
             </div>
 
             <div className="leave-stat-card days-card">
+
               <div className="stat-icon">
                 <FaCalendarAlt />
               </div>
@@ -2062,13 +3260,16 @@ const Leave = () => {
                 </span>
 
                 <strong>
-                  {totalLeaveDays}
+                  {
+                    totalLeaveDays
+                  }
                 </strong>
 
                 <small>
                   Days requested
                 </small>
               </div>
+
             </div>
 
           </div>
@@ -2084,15 +3285,19 @@ const Leave = () => {
             <div className="leave-filters">
 
               <div className="filter-select">
+
                 <FaCalendarAlt />
 
                 <select
                   value={
                     dateFilter
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event
+                  ) =>
                     setDateFilter(
-                      event.target.value
+                      event.target
+                        .value
                     )
                   }
                 >
@@ -2114,6 +3319,7 @@ const Leave = () => {
                 </select>
 
                 <FaChevronDown />
+
               </div>
 
               <div className="filter-select">
@@ -2122,9 +3328,12 @@ const Leave = () => {
                   value={
                     department
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event
+                  ) =>
                     setDepartment(
-                      event.target.value
+                      event.target
+                        .value
                     )
                   }
                 >
@@ -2145,6 +3354,7 @@ const Leave = () => {
                 </select>
 
                 <FaChevronDown />
+
               </div>
 
               <div className="filter-select">
@@ -2153,9 +3363,12 @@ const Leave = () => {
                   value={
                     leaveType
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event
+                  ) =>
                     setLeaveType(
-                      event.target.value
+                      event.target
+                        .value
                     )
                   }
                 >
@@ -2176,6 +3389,7 @@ const Leave = () => {
                 </select>
 
                 <FaChevronDown />
+
               </div>
 
               <div className="filter-select">
@@ -2184,9 +3398,12 @@ const Leave = () => {
                   value={
                     status
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event
+                  ) =>
                     setStatus(
-                      event.target.value
+                      event.target
+                        .value
                     )
                   }
                 >
@@ -2208,6 +3425,7 @@ const Leave = () => {
                 </select>
 
                 <FaChevronDown />
+
               </div>
 
               <div className="leave-search">
@@ -2220,9 +3438,12 @@ const Leave = () => {
                   value={
                     searchTerm
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event
+                  ) =>
                     setSearchTerm(
-                      event.target.value
+                      event.target
+                        .value
                     )
                   }
                 />
@@ -2239,6 +3460,7 @@ const Leave = () => {
 
                 <thead>
                   <tr>
+
                     <th>
                       Employee
                     </th>
@@ -2270,6 +3492,7 @@ const Leave = () => {
                     <th>
                       Actions
                     </th>
+
                   </tr>
                 </thead>
 
@@ -2277,6 +3500,7 @@ const Leave = () => {
 
                   {loading ? (
                     <tr>
+
                       <td
                         colSpan="8"
                         className="no-data"
@@ -2284,12 +3508,12 @@ const Leave = () => {
                         Loading leave
                         requests...
                       </td>
-                    </tr>
 
+                    </tr>
                   ) : filteredData.length ===
                     0 ? (
-
                     <tr>
+
                       <td
                         colSpan="8"
                         className="no-data"
@@ -2298,10 +3522,9 @@ const Leave = () => {
                         applications
                         found.
                       </td>
+
                     </tr>
-
                   ) : (
-
                     filteredData.map(
                       (leave) => (
                         <tr
@@ -2313,13 +3536,16 @@ const Leave = () => {
                           {/* EMPLOYEE */}
 
                           <td>
+
                             <div className="employee-cell">
 
                               <div className="employee-avatar">
                                 {(
                                   leave.employee ||
                                   "?"
-                                ).charAt(0)}
+                                ).charAt(
+                                  0
+                                )}
                               </div>
 
                               <div className="employee-details">
@@ -2339,6 +3565,7 @@ const Leave = () => {
                               </div>
 
                             </div>
+
                           </td>
 
                           {/* DEPARTMENT */}
@@ -2391,11 +3618,13 @@ const Leave = () => {
                           {/* DAYS */}
 
                           <td>
+
                             <strong className="days-number">
                               {
                                 leave.days
                               }
                             </strong>
+
                           </td>
 
                           {/* STATUS */}
@@ -2442,9 +3671,12 @@ const Leave = () => {
 
                               {/* APPROVE / REJECT */}
 
-                              {leave.status ===
-                                "Pending" && (
+                              {normalizeStatus(
+                                leave.status
+                              ) ===
+                                "pending" && (
                                 <>
+
                                   <button
                                     type="button"
                                     className="action-btn approve-btn"
@@ -2478,6 +3710,7 @@ const Leave = () => {
                                       Reject
                                     </span>
                                   </button>
+
                                 </>
                               )}
 
@@ -2510,6 +3743,7 @@ const Leave = () => {
                   )}
 
                 </tbody>
+
               </table>
 
             </div>
@@ -2517,6 +3751,7 @@ const Leave = () => {
             {/* FOOTER */}
 
             <div className="leave-table-footer">
+
               <span>
                 Showing{" "}
                 {
@@ -2528,6 +3763,7 @@ const Leave = () => {
                 }{" "}
                 applications
               </span>
+
             </div>
 
           </div>
@@ -2540,7 +3776,9 @@ const Leave = () => {
         {showAddModal && (
           <div
             className="leave-modal-overlay"
-            onMouseDown={(event) => {
+            onMouseDown={(
+              event
+            ) => {
               if (
                 event.target ===
                   event.currentTarget &&
@@ -2576,6 +3814,7 @@ const Leave = () => {
                     </p>
 
                   </div>
+
                 </div>
 
                 <button
@@ -2584,7 +3823,9 @@ const Leave = () => {
                   onClick={
                     closeAddModal
                   }
-                  disabled={saving}
+                  disabled={
+                    saving
+                  }
                 >
                   <FaTimes />
                 </button>
@@ -2612,7 +3853,9 @@ const Leave = () => {
                     onClick={
                       closeAddModal
                     }
-                    disabled={saving}
+                    disabled={
+                      saving
+                    }
                   >
                     Cancel
                   </button>
@@ -2620,7 +3863,15 @@ const Leave = () => {
                   <button
                     type="submit"
                     className="modal-action approve"
-                    disabled={saving}
+                    disabled={
+                      saving ||
+                      (
+                        formData.leave_type ===
+                          "Annual Leave" &&
+                        formData.total_working_days >
+                          annualLeaveBalance
+                      )
+                    }
                   >
 
                     <FaCheck />
@@ -2647,7 +3898,9 @@ const Leave = () => {
         {selectedLeave && (
           <div
             className="leave-modal-overlay"
-            onMouseDown={(event) => {
+            onMouseDown={(
+              event
+            ) => {
               if (
                 event.target ===
                 event.currentTarget
@@ -2821,7 +4074,6 @@ const Leave = () => {
                   selectedLeave.purposeJustification ||
                   selectedLeave.travelClaim !==
                     undefined) && (
-
                   <div className="leave-detail-extra">
 
                     {selectedLeave.travelClaim !==
@@ -2834,9 +4086,11 @@ const Leave = () => {
                         </span>
 
                         <strong>
-                          {selectedLeave.travelClaim
-                            ? "Requested"
-                            : "Not Requested"}
+                          {
+                            selectedLeave.travelClaim
+                              ? "Requested"
+                              : "Not Requested"
+                          }
                         </strong>
 
                       </div>
@@ -2861,7 +4115,6 @@ const Leave = () => {
 
                     {(selectedLeave.reason ||
                       selectedLeave.purposeJustification) && (
-
                       <div className="detail-full">
 
                         <span>
@@ -2877,6 +4130,127 @@ const Leave = () => {
 
                       </div>
                     )}
+
+                  </div>
+                )}
+
+                {/* =========================================
+                    DIRECTOR APPROVAL ATTACHMENT
+                ========================================= */}
+
+                {hasAttachment(
+                  selectedLeave
+                ) && (
+                  <div className="leave-attachment-detail">
+
+                    <div className="leave-attachment-detail-icon">
+                      <FaPaperclip />
+                    </div>
+
+                    <div className="leave-attachment-detail-info">
+
+                      <span>
+                        Director Approval
+                        Attachment
+                      </span>
+
+                      <strong>
+                        {
+                          getAttachmentName(
+                            selectedLeave
+                          ) ||
+                          "Attachment"
+                        }
+                      </strong>
+
+                      {getAttachmentSize(
+                        selectedLeave
+                      ) > 0 && (
+                        <small>
+                          {formatFileSize(
+                            getAttachmentSize(
+                              selectedLeave
+                            )
+                          )}
+                        </small>
+                      )}
+
+                    </div>
+
+                    {/* VIEW ATTACHMENT */}
+
+                    <button
+                      type="button"
+                      className="leave-attachment-view-btn"
+                      onClick={() =>
+                        handleViewAttachment(
+                          selectedLeave
+                        )
+                      }
+                      disabled={
+                        attachmentLoadingId ===
+                        `view-${selectedLeave.id}`
+                      }
+                      title="View attachment"
+                    >
+                      <FaEye />
+
+                      {attachmentLoadingId ===
+                      `view-${selectedLeave.id}`
+                        ? "Opening..."
+                        : "View"}
+                    </button>
+
+                    {/* DOWNLOAD ATTACHMENT */}
+
+                    <button
+                      type="button"
+                      className="leave-attachment-download-btn"
+                      onClick={() =>
+                        handleDownloadAttachment(
+                          selectedLeave
+                        )
+                      }
+                      disabled={
+                        attachmentLoadingId ===
+                        `download-${selectedLeave.id}`
+                      }
+                      title="Download attachment"
+                    >
+                      <FaDownload />
+
+                      {attachmentLoadingId ===
+                      `download-${selectedLeave.id}`
+                        ? "Downloading..."
+                        : "Download"}
+                    </button>
+
+                  </div>
+                )}
+
+                {/* NO ATTACHMENT */}
+
+                {!hasAttachment(
+                  selectedLeave
+                ) && (
+                  <div className="leave-attachment-detail no-attachment">
+
+                    <div className="leave-attachment-detail-icon">
+                      <FaPaperclip />
+                    </div>
+
+                    <div className="leave-attachment-detail-info">
+
+                      <span>
+                        Director Approval
+                        Attachment
+                      </span>
+
+                      <strong>
+                        No attachment uploaded
+                      </strong>
+
+                    </div>
 
                   </div>
                 )}
@@ -2902,8 +4276,10 @@ const Leave = () => {
 
                 <div className="leave-modal-actions">
 
-                  {selectedLeave.status ===
-                    "Pending" && (
+                  {normalizeStatus(
+                    selectedLeave.status
+                  ) ===
+                    "pending" && (
                     <>
 
                       <button
@@ -2962,4 +4338,3 @@ const Leave = () => {
 };
 
 export default Leave;
-
