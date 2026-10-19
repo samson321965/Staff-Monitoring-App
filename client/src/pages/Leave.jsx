@@ -157,6 +157,22 @@ const calculateWorkingDays = (start, end, holidayDates = new Set()) => {
   return count;
 };
 
+const calculateWorkingDaysByYear = (start, end, holidayDates = new Set()) => {
+  if (calculateWorkingDays(start, end, holidayDates) <= 0) return {};
+
+  const startYear = Number(start.slice(0, 4));
+  const endYear = Number(end.slice(0, 4));
+  const daysByYear = {};
+
+  for (let year = startYear; year <= endYear; year += 1) {
+    const yearStart = year === startYear ? start : `${year}-01-01`;
+    const yearEnd = year === endYear ? end : `${year}-12-31`;
+    daysByYear[year] = calculateWorkingDays(yearStart, yearEnd, holidayDates);
+  }
+
+  return daysByYear;
+};
+
 // ======================================================
 // NORMALIZE STATUS
 // ======================================================
@@ -191,11 +207,6 @@ const getLeaveEmployeeId = (item) => {
     ""
   );
 };
-
-// ======================================================
-// GET LEAVE DAYS
-// Handles different API field names
-// ======================================================
 
 const getLeaveDays = (item) => {
   const days = Number(
@@ -424,16 +435,16 @@ const Leave = () => {
   // Rejected = does not reduce balance
   // ====================================================
 
-  const annualLeaveUsed = useMemo(() => {
+  const annualLeaveUsedByYear = useMemo(() => {
     if (!formData.employee_id) {
-      return 0;
+      return {};
     }
 
     const selectedEmployeeId =
       String(formData.employee_id);
 
     return leaveData.reduce(
-      (total, item) => {
+      (usageByYear, item) => {
         const itemEmployeeId =
           String(
             getLeaveEmployeeId(item)
@@ -454,14 +465,14 @@ const Leave = () => {
           itemLeaveType !==
           "annual leave"
         ) {
-          return total;
+          return usageByYear;
         }
 
         if (
           itemEmployeeId !==
           selectedEmployeeId
         ) {
-          return total;
+          return usageByYear;
         }
 
         if (
@@ -470,7 +481,7 @@ const Leave = () => {
           currentStatus ===
             "cancelled"
         ) {
-          return total;
+          return usageByYear;
         }
 
         if (
@@ -479,20 +490,31 @@ const Leave = () => {
           currentStatus !==
             "pending"
         ) {
-          return total;
+          return usageByYear;
         }
 
-        return (
-          total +
-          getLeaveDays(item)
+        const leaveDaysByYear = calculateWorkingDaysByYear(
+          item.startDate ?? item.start_date,
+          item.endDate ?? item.end_date,
+          holidayDates
         );
+
+        for (const [year, days] of Object.entries(leaveDaysByYear)) {
+          usageByYear[year] = (usageByYear[year] || 0) + days;
+        }
+
+        return usageByYear;
       },
-      0
+      {}
     );
   }, [
     leaveData,
     formData.employee_id,
+    holidayDates,
   ]);
+
+  const annualLeaveYear = Number(formData.start_date.slice(0, 4)) || new Date().getFullYear();
+  const annualLeaveUsed = annualLeaveUsedByYear[annualLeaveYear] || 0;
 
   // ====================================================
   // ANNUAL LEAVE BALANCE
@@ -504,6 +526,30 @@ const Leave = () => {
       ANNUAL_LEAVE_ALLOWANCE -
         annualLeaveUsed
     );
+
+  const annualLeaveRequestDaysByYear = calculateWorkingDaysByYear(
+    formData.start_date,
+    formData.end_date,
+    holidayDates
+  );
+  const annualLeaveRequestedDays =
+    formData.leave_type === "Annual Leave"
+      ? annualLeaveRequestDaysByYear[annualLeaveYear] || 0
+      : 0;
+  const annualLeaveProjectedBalance = Math.max(
+    0,
+    annualLeaveBalance - annualLeaveRequestedDays
+  );
+
+  const annualLeaveExceeded = Object.entries(
+    annualLeaveRequestDaysByYear
+  ).find(([year, requestedDays]) => {
+    const remainingDays = Math.max(
+      0,
+      ANNUAL_LEAVE_ALLOWANCE - (annualLeaveUsedByYear[year] || 0)
+    );
+    return requestedDays > remainingDays;
+  });
 
   // ====================================================
   // LOAD LEAVE REQUESTS
@@ -1365,12 +1411,17 @@ const Leave = () => {
         formData.leave_type ===
         "Annual Leave"
       ) {
-        const currentBalance =
-          Math.max(
+        const requestedDaysByYear = calculateWorkingDaysByYear(
+          formData.start_date,
+          formData.end_date,
+          holidayDates
+        );
+        const exceededYear = Object.entries(requestedDaysByYear).find(
+          ([year, days]) => days > Math.max(
             0,
-            ANNUAL_LEAVE_ALLOWANCE -
-              annualLeaveUsed
-          );
+            ANNUAL_LEAVE_ALLOWANCE - (annualLeaveUsedByYear[year] || 0)
+          )
+        );
 
         console.log(
           "Annual Leave Validation:",
@@ -1379,31 +1430,32 @@ const Leave = () => {
               formData.employee_id,
             allowance:
               ANNUAL_LEAVE_ALLOWANCE,
-            used:
-              annualLeaveUsed,
-            balance:
-              currentBalance,
-            requested:
-              requestedDays,
+            usedByYear:
+              annualLeaveUsedByYear,
+            requestedByYear:
+              requestedDaysByYear,
           }
         );
 
-        if (
-          requestedDays >
-          currentBalance
-        ) {
+        if (exceededYear) {
+          const [year, days] = exceededYear;
+          const currentBalance = Math.max(
+            0,
+            ANNUAL_LEAVE_ALLOWANCE - (annualLeaveUsedByYear[year] || 0)
+          );
+
           setError(
-            `Annual leave limit exceeded. This employee has only ${currentBalance} annual leave ${
+            `Annual leave limit exceeded for ${year}. This employee has only ${currentBalance} annual leave ${
               currentBalance ===
               1
                 ? "day"
                 : "days"
-            } remaining, but ${requestedDays} ${
-              requestedDays ===
+            } remaining, but ${days} ${
+              days ===
               1
                 ? "day"
                 : "days"
-            } were requested.`
+            } were requested in that year.`
           );
 
           return;
@@ -2394,57 +2446,64 @@ const Leave = () => {
 
               <div className="leave-form-field">
                 <label>
-                  Annual Leave Balance
+                  {formData.leave_type === "Annual Leave"
+                    ? "Balance After This Request"
+                    : "Annual Leave Balance"}
                 </label>
 
                 <input
                   type="number"
                   value={
-                    annualLeaveBalance
+                    formData.leave_type === "Annual Leave"
+                      ? annualLeaveProjectedBalance
+                      : annualLeaveBalance
                   }
                   readOnly
                 />
 
                 <small>
-                  {annualLeaveUsed}{" "}
-                  days used from{" "}
-                  {
-                    ANNUAL_LEAVE_ALLOWANCE
-                  }{" "}
-                  annual leave days.
+                  {annualLeaveUsed} used or reserved
+                  {formData.leave_type === "Annual Leave" &&
+                    ` + ${annualLeaveRequestedDays} requested`}
+                  {` in ${annualLeaveYear} from ${ANNUAL_LEAVE_ALLOWANCE} annual leave days.`}
                 </small>
               </div>
             </div>
 
             {formData.leave_type ===
               "Annual Leave" &&
-              formData.total_working_days >
-                annualLeaveBalance && (
+              annualLeaveExceeded && (
                 <div className="leave-form-note">
                   <strong>
                     Annual Leave Limit Exceeded:
                   </strong>{" "}
-                  This employee has only{" "}
+                  Only{" "}
                   {
-                    annualLeaveBalance
+                    Math.max(
+                      0,
+                      ANNUAL_LEAVE_ALLOWANCE -
+                        (annualLeaveUsedByYear[annualLeaveExceeded[0]] || 0)
+                    )
                   }{" "}
                   {
-                    annualLeaveBalance ===
+                    Math.max(
+                      0,
+                      ANNUAL_LEAVE_ALLOWANCE -
+                        (annualLeaveUsedByYear[annualLeaveExceeded[0]] || 0)
+                    ) ===
                     1
                       ? "day"
                       : "days"
-                  }{" "}
-                  remaining, but{" "}
+                  }{" "}remain in {annualLeaveExceeded[0]}, but{" "}
                   {
-                    formData.total_working_days
+                    annualLeaveExceeded[1]
                   }{" "}
                   {
-                    formData.total_working_days ===
+                    annualLeaveExceeded[1] ===
                     1
                       ? "day"
                       : "days"
-                  }{" "}
-                  have been requested.
+                  }{" "}requested for that year.
                 </div>
               )}
           </div>
@@ -3868,8 +3927,7 @@ const Leave = () => {
                       (
                         formData.leave_type ===
                           "Annual Leave" &&
-                        formData.total_working_days >
-                          annualLeaveBalance
+                        annualLeaveExceeded
                       )
                     }
                   >

@@ -376,14 +376,64 @@ const getAnnualLeaveUsedDays = async (
             AND LOWER(TRIM(COALESCE(lr.status, ''))) IN ('approved', 'pending')
     `, [employeeId, excludedLeaveId]);
 
-    return result.rows.reduce(
-        (total, leave) => total + calculateWorkingDays(
+    return result.rows.reduce((usageByYear, leave) => {
+        const leaveDaysByYear = calculateWorkingDaysByYear(
             leave.start_date,
             leave.end_date,
             holidayDates
-        ),
-        0
-    );
+        );
+
+        for (const [year, days] of Object.entries(leaveDaysByYear)) {
+            usageByYear[year] = (usageByYear[year] || 0) + days;
+        }
+
+        return usageByYear;
+    }, {});
+};
+
+const calculateWorkingDaysByYear = (
+    startDate,
+    endDate,
+    holidayDates
+) => {
+    const toDateString = (value) => value instanceof Date
+        ? value.toISOString().slice(0, 10)
+        : String(value || "").slice(0, 10);
+    const start = toDateString(startDate);
+    const end = toDateString(endDate);
+
+    if (calculateWorkingDays(start, end, holidayDates) <= 0) {
+        return {};
+    }
+
+    const startYear = Number(start.slice(0, 4));
+    const endYear = Number(end.slice(0, 4));
+    const daysByYear = {};
+
+    for (let year = startYear; year <= endYear; year += 1) {
+        const yearStart = year === startYear ? start : `${year}-01-01`;
+        const yearEnd = year === endYear ? end : `${year}-12-31`;
+        daysByYear[year] = calculateWorkingDays(
+            yearStart,
+            yearEnd,
+            holidayDates
+        );
+    }
+
+    return daysByYear;
+};
+
+const findAnnualLeaveLimitExceeded = (requestedByYear, usedByYear) => {
+    for (const [year, requestedDays] of Object.entries(requestedByYear)) {
+        const usedDays = usedByYear[year] || 0;
+        const remainingDays = Math.max(0, ANNUAL_LEAVE_ALLOWANCE - usedDays);
+
+        if (requestedDays > remainingDays) {
+            return { year: Number(year), requestedDays, usedDays, remainingDays };
+        }
+    }
+
+    return null;
 };
 
 const normalizeLeaveType = (value) => {
@@ -669,6 +719,15 @@ router.get(
             await ensureLeaveSchema();
             const holidays = await getActivePublicHolidays();
             const holidayDates = new Set(holidays.map((holiday) => holiday.date));
+            const balanceYear = req.query.year === undefined
+                ? new Date().getFullYear()
+                : Number(req.query.year);
+
+            if (!Number.isInteger(balanceYear) || balanceYear < 1900 || balanceYear > 9999) {
+                return res.status(400).json({
+                    message: "Invalid annual leave balance year.",
+                });
+            }
 
             const employeeId =
                 Number(req.params.employeeId);
@@ -761,11 +820,12 @@ router.get(
                 const leave
                 of leaveResult.rows
             ) {
-                const days = calculateWorkingDays(
+                const daysByYear = calculateWorkingDaysByYear(
                     leave.start_date,
                     leave.end_date,
                     holidayDates
                 );
+                const days = daysByYear[balanceYear] || 0;
 
                 if (days <= 0) {
                     continue;
@@ -809,6 +869,9 @@ router.get(
 
                 employee:
                     `${employee.first_name} ${employee.last_name}`,
+
+                annualLeaveYear:
+                    balanceYear,
 
                 annualLeaveAllowance:
                     ANNUAL_LEAVE_ALLOWANCE,
@@ -1004,6 +1067,8 @@ router.post(
     async (req, res) => {
         try {
             await ensureLeaveSchema();
+            const holidays = await getActivePublicHolidays();
+            const holidayDates = new Set(holidays.map((holiday) => holiday.date));
 
             const {
                 employee_id,
@@ -1220,41 +1285,42 @@ router.post(
                     leave_type
                 ) === "annual leave"
             ) {
-                const usedDays = await getAnnualLeaveUsedDays(
+                const usedDaysByYear = await getAnnualLeaveUsedDays(
                     employee_id,
                     holidayDates
                 );
+                const requestedDaysByYear = calculateWorkingDaysByYear(
+                    start_date,
+                    end_date,
+                    holidayDates
+                );
+                const exceededYear = findAnnualLeaveLimitExceeded(
+                    requestedDaysByYear,
+                    usedDaysByYear
+                );
 
-                const remainingDays =
-                    Math.max(
-                        0,
-                        ANNUAL_LEAVE_ALLOWANCE -
-                        usedDays
-                    );
-
-                if (
-                    workingDays >
-                    remainingDays
-                ) {
+                if (exceededYear) {
                     return res.status(400).json({
                         message:
                             `Annual Leave allowance exceeded. ` +
-                            `This employee has only ` +
-                            `${remainingDays} ` +
-                            `working day(s) remaining ` +
+                            `Only ${exceededYear.remainingDays} ` +
+                            `working day(s) remain in ${exceededYear.year} ` +
                             `from the ${ANNUAL_LEAVE_ALLOWANCE}-day annual allowance.`,
 
                         annualLeaveAllowance:
                             ANNUAL_LEAVE_ALLOWANCE,
 
                         annualLeaveUsed:
-                            usedDays,
+                            exceededYear.usedDays,
 
                         annualLeaveBalance:
-                            remainingDays,
+                            exceededYear.remainingDays,
+
+                        annualLeaveYear:
+                            exceededYear.year,
 
                         requestedDays:
-                            workingDays,
+                            exceededYear.requestedDays,
                     });
                 }
             }
@@ -1472,16 +1538,17 @@ router.post(
                     leave_type
                 ) === "annual leave"
             ) {
-                const usedDays = await getAnnualLeaveUsedDays(
+                const usedDaysByYear = await getAnnualLeaveUsedDays(
                     employee_id,
                     holidayDates
                 );
+                const annualLeaveYear = Number(String(start_date).slice(0, 4));
 
                 annualLeaveBalance =
                     Math.max(
                         0,
                         ANNUAL_LEAVE_ALLOWANCE -
-                        usedDays
+                        (usedDaysByYear[annualLeaveYear] || 0)
                     );
             }
 
@@ -1497,6 +1564,9 @@ router.post(
                     ? {
                         annualLeaveAllowance:
                             ANNUAL_LEAVE_ALLOWANCE,
+
+                        annualLeaveYear:
+                            Number(String(start_date).slice(0, 4)),
 
                         annualLeaveBalance,
                     }
@@ -1636,38 +1706,40 @@ router.put(
                     leave.leave_type
                 ) === "annual leave"
             ) {
-                const usedDays = await getAnnualLeaveUsedDays(
+                const usedDaysByYear = await getAnnualLeaveUsedDays(
                     leave.employee_id,
                     holidayDates,
                     leave.id
                 );
+                const requestedDaysByYear = calculateWorkingDaysByYear(
+                    leave.start_date,
+                    leave.end_date,
+                    holidayDates
+                );
+                const exceededYear = findAnnualLeaveLimitExceeded(
+                    requestedDaysByYear,
+                    usedDaysByYear
+                );
 
-                const remainingDays =
-                    Math.max(
-                        0,
-                        ANNUAL_LEAVE_ALLOWANCE -
-                        usedDays
-                    );
-
-                if (
-                    requestedDays >
-                    remainingDays
-                ) {
+                if (exceededYear) {
                     return res.status(400).json({
                         message:
                             `Cannot approve this Annual Leave request. ` +
-                            `Only ${remainingDays} ` +
-                            `working day(s) remain from the ` +
+                            `Only ${exceededYear.remainingDays} ` +
+                            `working day(s) remain in ${exceededYear.year} from the ` +
                             `${ANNUAL_LEAVE_ALLOWANCE}-day annual allowance.`,
 
                         annualLeaveAllowance:
                             ANNUAL_LEAVE_ALLOWANCE,
 
                         annualLeaveUsed:
-                            usedDays,
+                            exceededYear.usedDays,
 
                         annualLeaveBalance:
-                            remainingDays,
+                            exceededYear.remainingDays,
+
+                        annualLeaveYear:
+                            exceededYear.year,
 
                         requestedDays,
                     });
@@ -1889,40 +1961,42 @@ router.put(
                     newLeaveType
                 ) === "annual leave"
             ) {
-                const usedDays = await getAnnualLeaveUsedDays(
+                const usedDaysByYear = await getAnnualLeaveUsedDays(
                     current.employee_id,
                     holidayDates,
                     req.params.id
                 );
+                const requestedDaysByYear = calculateWorkingDaysByYear(
+                    newStartDate,
+                    newEndDate,
+                    holidayDates
+                );
+                const exceededYear = findAnnualLeaveLimitExceeded(
+                    requestedDaysByYear,
+                    usedDaysByYear
+                );
 
-                const remainingDays =
-                    Math.max(
-                        0,
-                        ANNUAL_LEAVE_ALLOWANCE -
-                        usedDays
-                    );
-
-                if (
-                    newWorkingDays >
-                    remainingDays
-                ) {
+                if (exceededYear) {
                     return res.status(400).json({
                         message:
                             `Annual Leave allowance exceeded. ` +
-                            `Only ${remainingDays} ` +
-                            `working day(s) remain.`,
+                            `Only ${exceededYear.remainingDays} ` +
+                            `working day(s) remain in ${exceededYear.year}.`,
 
                         annualLeaveAllowance:
                             ANNUAL_LEAVE_ALLOWANCE,
 
                         annualLeaveUsed:
-                            usedDays,
+                            exceededYear.usedDays,
 
                         annualLeaveBalance:
-                            remainingDays,
+                            exceededYear.remainingDays,
+
+                        annualLeaveYear:
+                            exceededYear.year,
 
                         requestedDays:
-                            newWorkingDays,
+                            exceededYear.requestedDays,
                     });
                 }
             }
